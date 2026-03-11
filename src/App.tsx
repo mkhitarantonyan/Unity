@@ -36,6 +36,16 @@ export default function App() {
   const [forceShow, setForceShow] = useState(false);
   const [forceHideLoading, setForceHideLoading] = useState(false);
 
+const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      setMousePos({ x: e.clientX, y: e.clientY });
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, []);
+  
   useEffect(() => {
     const timer = setTimeout(() => setForceShow(true), 3000);
     return () => clearTimeout(timer);
@@ -931,7 +941,17 @@ const handleBuy = async () => {
           </motion.div>
         )}
       </AnimatePresence>
-
+      {selectedUnitIds.length === 1 && (
+        <div
+          className="fixed pointer-events-none z- bg-black text-white px-3 py-1.5 text-[10px] font-mono uppercase border border-white/20 tracking-widest shadow-xl"
+          style={{
+            left: mousePos.x + 16,
+            top: mousePos.y + 16,
+          }}
+        >
+          Hold [SHIFT] to multi-select
+        </div>
+      )}
       {/* Background Loading Indicator */}
       {isLoading && units.length > 0 && (
         <div className="absolute top-6 left-1/2 -translate-x-1/2 z-50 bg-[#141414] border border-[#262626] px-4 py-2 flex items-center gap-3">
