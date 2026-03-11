@@ -523,10 +523,10 @@ const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         />
       </div>
 
-      {/* Selection Mode & Guides Toolbar */}
+{/* Selection Mode & Guides Toolbar */}
       <div className={`fixed z-40 flex flex-col gap-2 transition-all duration-300 
         ${isMobile 
-          ? 'top-1/2 -translate-y-1/2 right-4' 
+          ? 'top-[40%] -translate-y-1/2 right-4' 
           : 'bottom-8 left-8'                  
         }`}>
         
@@ -541,7 +541,7 @@ const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
               : 'bg-[#141414]/80 backdrop-blur-md border-[#262626] text-gray-400'
           }`}
         >
-          <div className={`w-2 h-2 rounded-full ${showGuides ? 'bg-white animate-pulse' : 'bg-gray-600'} ${!isMobile && 'mr-1'}`} />
+          <div className={`w-2 h-2 rounded-full ${showGuides ? 'bg-white animate-pulse' : 'bg-gray-600'} ${!isMobile ? 'mr-1' : ''}`} />
           {!isMobile && (
             <span className="text-[10px] uppercase tracking-[0.2em] font-bold">
               Guides: {showGuides ? 'ON' : 'OFF'}
