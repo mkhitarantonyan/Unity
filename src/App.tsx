@@ -11,6 +11,7 @@ import { Toolbar } from './components/Toolbar';
 import { AuthModal } from './components/modals/AuthModal';
 import { ProfileModal } from './components/modals/ProfileModal';
 import { AdminPanel } from './components/modals/AdminPanel';
+import { LegalModal } from './components/modals/LegalModal';
 import { processImage } from './utils/image';
 import { MousePointer2, BoxSelect, LogIn, LogOut, X, Shield, Users, Settings as SettingsIcon, BarChart3, Trash2, Lock, Unlock, Image as ImageIcon, Search, Heart } from 'lucide-react';
 import { useGrid, Unit } from './hooks/useGrid';
@@ -80,6 +81,7 @@ export default function App() {
   const myTotalValue = myUnits.reduce((sum, u) => sum + u.sale_price, 0);
 
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [legalType, setLegalType] = useState<'terms' | 'privacy' | 'refund' | null>(null);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
 
   const [showAdminPanel, setShowAdminPanel] = useState(false);
@@ -500,7 +502,7 @@ const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         user={user}
         setGlobalSettings={setSettings}
       />
-      {/* Auth Modal */}
+{/* Auth Modal */}
       <AuthModal 
         isOpen={showAuthModal}
         initialMode={authMode}
@@ -509,6 +511,19 @@ const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
           setUser(newUser);
           refresh(); // обновляем сетку после логина
         }}
+        onOpenLegal={setLegalType}
+      />
+      {/* Окно с документами */}
+      <LegalModal 
+        isOpen={!!legalType} 
+        type={legalType} 
+        onClose={() => setLegalType(null)} 
+      />
+      {/* Legal Modal */}
+      <LegalModal 
+        isOpen={!!legalType} 
+        type={legalType} 
+        onClose={() => setLegalType(null)} 
       />
       <CursorTooltip selectedCount={selectedUnitIds.length} />
       

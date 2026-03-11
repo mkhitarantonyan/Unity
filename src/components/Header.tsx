@@ -30,7 +30,7 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   return (
     <header className="absolute top-0 left-0 w-full p-4 sm:p-6 z-20 flex justify-between items-start pointer-events-none">
-      {/* ЛЕВАЯ ЧАСТЬ: Брендинг и Благотворительность */}
+{/* ЛЕВАЯ ЧАСТЬ: Брендинг, Благотворительность и Контакты */}
       <div className="pointer-events-auto flex flex-col items-start">
         <h1 className="text-2xl sm:text-4xl font-bold tracking-tighter leading-none">
           {settings?.ui_title || 'UNITY'}
@@ -39,11 +39,21 @@ export const Header: React.FC<HeaderProps> = ({
           {settings?.ui_subtitle || 'The Collective Canvas'}
         </p>
         
-        <div className="mt-4 inline-flex items-center gap-2 bg-[#141414]/80 backdrop-blur-md border border-[#262626] px-3 py-1.5 shadow-lg">
-          <Heart size={12} className="text-[#FF5733] fill-[#FF5733]" />
-          <span className="text-[8px] uppercase tracking-[0.1em] text-gray-400 font-bold">
-            10% of transactions go to charity
-          </span>
+        {/* Блок с бейджами */}
+        <div className="mt-4 flex flex-col sm:flex-row items-start sm:items-center gap-2">
+          <div className="inline-flex items-center gap-2 bg-[#141414]/80 backdrop-blur-md border border-[#262626] px-3 py-1.5 shadow-lg">
+            <Heart size={12} className="text-[#FF5733] fill-[#FF5733]" />
+            <span className="text-[8px] uppercase tracking-[0.1em] text-gray-400 font-bold">
+              10% of transactions go to charity
+            </span>
+          </div>
+          
+          <a 
+            href="mailto:support@unity-grid.com" 
+            className="inline-flex items-center gap-2 bg-[#141414]/80 backdrop-blur-md border border-[#262626] px-3 py-1.5 shadow-lg text-[8px] uppercase tracking-[0.1em] text-gray-500 hover:text-[#FF5733] transition-colors font-bold"
+          >
+            support@unity-grid.com
+          </a>
         </div>
       </div>
       
