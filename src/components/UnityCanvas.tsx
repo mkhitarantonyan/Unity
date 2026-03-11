@@ -93,8 +93,8 @@ export const UnityCanvas: React.FC<UnityCanvasProps> = ({
 
     const initApp = async () => {
       PIXI.TextureSource.defaultOptions.scaleMode = 'nearest';
-
       const newApp = new PIXI.Application();
+      
       try {
         await newApp.init({
           resizeTo: containerRef.current || undefined, 
@@ -125,7 +125,7 @@ export const UnityCanvas: React.FC<UnityCanvasProps> = ({
         gridGraphicsRef.current = gridGraphics;
 
         const hitArea = new PIXI.Graphics();
-        hitArea.rect(0, 0, GRID_SIZE * UNIT_SIZE, GRID_SIZE * UNIT_SIZE);
+        hitArea.rect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
         hitArea.fill({ color: 0x000000, alpha: 0 });
         viewport.addChild(hitArea);
 
@@ -147,8 +147,9 @@ export const UnityCanvas: React.FC<UnityCanvasProps> = ({
 
         drawGrid(gridGraphics, !!showGuides);
 
-        // --- ЛОГИКА ТАЧ-СОБЫТИЙ (Pinch to Zoom) ---
+        // --- МОБИЛЬНАЯ ЛОГИКА ---
         let lastPinchDist = 0;
+        let lastPos = { x: 0, y: 0 };
         const activePointers = new Map<number, { x: number, y: number }>();
 
         const getDist = (p1: {x:number, y:number}, p2: {x:number, y:number}) => {
@@ -165,7 +166,6 @@ export const UnityCanvas: React.FC<UnityCanvasProps> = ({
 
         const onPointerDown = (e: PointerEvent) => {
           activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-          
           if (activePointers.size === 1) {
             isMouseDownRef.current = true;
             lastPos = { x: e.clientX, y: e.clientY };
@@ -173,54 +173,56 @@ export const UnityCanvas: React.FC<UnityCanvasProps> = ({
               dragStartWorldPosRef.current = viewport.toLocal(getGlobalPos(e.clientX, e.clientY));
             }
           } else if (activePointers.size === 2) {
-            // Начало щипка (зума)
             const pts = Array.from(activePointers.values());
             lastPinchDist = getDist(pts, pts);
-            dragStartWorldPosRef.current = null; // Отменяем выделение при зуме
+            dragStartWorldPosRef.current = null;
+            if (marqueeGraphicsRef.current) marqueeGraphicsRef.current.clear();
           }
           if (onInteraction) onInteraction();
         };
 
-    const onPointerMove = (e: PointerEvent) => {
+        const onPointerMove = (e: PointerEvent) => {
           if (!activePointers.has(e.pointerId)) return;
           activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
           if (activePointers.size === 2) {
             const pts = Array.from(activePointers.values());
             const dist = getDist(pts, pts);
-
-            // ЗАЩИТА №1: Если пальцы слишком близко или расстояние не изменилось - ничего не делаем
-            if (lastPinchDist <= 0 || Math.abs(dist - lastPinchDist) < 1) {
+            if (lastPinchDist > 0) {
+              const zoomFactor = dist / lastPinchDist;
               lastPinchDist = dist;
-              return;
+              const midX = (pts.x + pts.x) / 2;
+              const midY = (pts.y + pts.y) / 2;
+              const globalMid = getGlobalPos(midX, midY);
+              if (isNaN(globalMid.x) || isNaN(globalMid.y)) return;
+              const worldMid = viewport.toLocal(globalMid);
+              const newScale = Math.max(0.15, Math.min(10, viewport.scale.x * zoomFactor));
+              viewport.scale.set(newScale);
+              const newGlobalMid = viewport.toGlobal(worldMid);
+              viewport.x += globalMid.x - newGlobalMid.x;
+              viewport.y += globalMid.y - newGlobalMid.y;
+              lastPos = { x: midX, y: midY };
             }
-
-            const zoomFactor = dist / lastPinchDist;
-            lastPinchDist = dist;
-
-            const midX = (pts.x + pts.x) / 2;
-            const midY = (pts.y + pts.y) / 2;
-            const globalMid = getGlobalPos(midX, midY);
-            
-            // ЗАЩИТА №2: Проверяем, что координаты корректны перед применением
-            if (isNaN(globalMid.x) || isNaN(globalMid.y)) return;
-
-            const worldMid = viewport.toLocal(globalMid);
-            const newScale = Math.max(0.2, Math.min(8, viewport.scale.x * zoomFactor));
-            
-            viewport.scale.set(newScale);
-            
-            const newGlobalMid = viewport.toGlobal(worldMid);
-            
-            // ЗАЩИТА №3: Плавное смещение без рывков
-            viewport.x += globalMid.x - newGlobalMid.x;
-            viewport.y += globalMid.y - newGlobalMid.y;
-            
-            // Важно обновить lastPos для плавного перехода на один палец
-            lastPos = { x: midX, y: midY };
-
           } else if (activePointers.size === 1 && isMouseDownRef.current) {
-            // ... тут твой старый код для перемещения одним пальцем ...
+            if (e.shiftKey || isSelectionModeRef.current) {
+              if (dragStartWorldPosRef.current && marqueeGraphicsRef.current) {
+                const currentWorldPos = viewport.toLocal(getGlobalPos(e.clientX, e.clientY));
+                const mg = marqueeGraphicsRef.current;
+                mg.clear().setStrokeStyle({ width: 1, color: 0xFFFFFF, alpha: 0.8 })
+                  .rect(Math.min(dragStartWorldPosRef.current.x, currentWorldPos.x),
+                        Math.min(dragStartWorldPosRef.current.y, currentWorldPos.y),
+                        Math.abs(currentWorldPos.x - dragStartWorldPosRef.current.x),
+                        Math.abs(currentWorldPos.y - dragStartWorldPosRef.current.y))
+                  .fill({ color: 0xFFFFFF, alpha: 0.1 }).stroke();
+              }
+            } else {
+              viewport.x += e.clientX - lastPos.x;
+              viewport.y += e.clientY - lastPos.y;
+              lastPos = { x: e.clientX, y: e.clientY };
+            }
+          }
+          if (onInteraction) onInteraction();
+        };
 
         const onPointerUp = (e: PointerEvent) => {
           if (activePointers.size === 1 && (e.shiftKey || isSelectionModeRef.current) && dragStartWorldPosRef.current && onUnitsSelect) {
@@ -229,49 +231,35 @@ export const UnityCanvas: React.FC<UnityCanvasProps> = ({
             const minY = Math.floor(Math.min(dragStartWorldPosRef.current.y, currentWorldPos.y) / UNIT_SIZE);
             const maxX = Math.floor(Math.max(dragStartWorldPosRef.current.x, currentWorldPos.x) / UNIT_SIZE);
             const maxY = Math.floor(Math.max(dragStartWorldPosRef.current.y, currentWorldPos.y) / UNIT_SIZE);
-            
-            const newSelectedIds: number[] = [];
+            const ids: number[] = [];
             for (let y = Math.max(0, minY); y <= Math.min(GRID_SIZE - 1, maxY); y++) {
-              for (let x = Math.max(0, minX); x <= Math.min(GRID_SIZE - 1, maxX); x++) {
-                newSelectedIds.push(y * GRID_SIZE + x);
-              }
+              for (let x = Math.max(0, minX); x <= Math.min(GRID_SIZE - 1, maxX); x++) ids.push(y * GRID_SIZE + x);
             }
-            if (newSelectedIds.length > 0) onUnitsSelect(newSelectedIds);
+            if (ids.length > 0) onUnitsSelect(ids);
           }
-
           activePointers.delete(e.pointerId);
           if (activePointers.size < 2) lastPinchDist = 0;
-          if (activePointers.size === 0) {
+          if (activePointers.size === 1) {
+            const rem = activePointers.values().next().value;
+            lastPos = { x: rem.x, y: rem.y };
+          } else if (activePointers.size === 0) {
             isMouseDownRef.current = false;
             dragStartWorldPosRef.current = null;
-            if (marqueeGraphicsRef.current) marqueeGraphicsRef.current.clear();
+            marqueeGraphicsRef.current?.clear();
           }
         };
 
-        let lastPos = { x: 0, y: 0 };
-
-        // Колесико мыши для десктопа
-        const onWheel = (e: any) => {
+        const onWheel = (e: WheelEvent) => {
           e.preventDefault();
-          const zoomFactor = 1.1;
-          const direction = e.deltaY > 0 ? 1 / zoomFactor : zoomFactor;
-          const newScale = Math.max(0.1, Math.min(10, viewport.scale.x * direction));
-          const mousePos = app!.renderer.events.pointer.global;
-          const worldPos = viewport.toLocal(mousePos);
-          viewport.scale.set(newScale);
-          const newMousePos = viewport.toGlobal(worldPos);
-          viewport.x += mousePos.x - newMousePos.x;
-          viewport.y += mousePos.y - newMousePos.y;
+          const factor = e.deltaY > 0 ? 0.9 : 1.1;
+          const worldPos = viewport.toLocal(app!.renderer.events.pointer.global);
+          viewport.scale.set(Math.max(0.1, Math.min(10, viewport.scale.x * factor)));
+          const newGlobal = viewport.toGlobal(worldPos);
+          viewport.x += app!.renderer.events.pointer.global.x - newGlobal.x;
+          viewport.y += app!.renderer.events.pointer.global.y - newGlobal.y;
           if (onInteraction) onInteraction();
         };
 
-        const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Shift') isShiftDownRef.current = true; };
-        const onKeyUp = (e: KeyboardEvent) => { if (e.key === 'Shift') isShiftDownRef.current = false; };
-
-        window.addEventListener('keydown', onKeyDown);
-        window.addEventListener('keyup', onKeyUp);
-        
-        // Переходим на Pointer events для универсальности (мышь + тач)
         app.canvas.addEventListener('pointerdown', onPointerDown);
         window.addEventListener('pointermove', onPointerMove);
         window.addEventListener('pointerup', onPointerUp);
@@ -279,47 +267,44 @@ export const UnityCanvas: React.FC<UnityCanvasProps> = ({
         app.canvas.addEventListener('wheel', onWheel, { passive: false });
 
         app.ticker.add(() => {
-          if (viewportDataRef && viewportRef.current) {
+          if (viewportDataRef?.current && viewportRef.current) {
             const vp = viewportRef.current;
-            const topLeft = vp.toLocal({ x: 0, y: 0 });
-            const bottomRight = vp.toLocal({ x: app!.screen.width, y: app!.screen.height });
-            viewportDataRef.current = {
-              x: topLeft.x / UNIT_SIZE,
-              y: topLeft.y / UNIT_SIZE,
-              w: (bottomRight.x - topLeft.x) / UNIT_SIZE,
-              h: (bottomRight.y - topLeft.y) / UNIT_SIZE
-            };
+            const tl = vp.toLocal({ x: 0, y: 0 });
+            const br = vp.toLocal({ x: app!.screen.width, y: app!.screen.height });
+            viewportDataRef.current = { x: tl.x / UNIT_SIZE, y: tl.y / UNIT_SIZE, w: (br.x - tl.x) / UNIT_SIZE, h: (br.y - tl.y) / UNIT_SIZE };
           }
         });
 
         (app as any)._unityCleanup = () => {
-          if (app?.canvas) {
-            app.canvas.removeEventListener('pointerdown', onPointerDown);
-            app.canvas.removeEventListener('wheel', onWheel);
-          }
+          app?.canvas.removeEventListener('pointerdown', onPointerDown);
           window.removeEventListener('pointermove', onPointerMove);
           window.removeEventListener('pointerup', onPointerUp);
           window.removeEventListener('pointercancel', onPointerUp);
-          window.removeEventListener('keydown', onKeyDown);
-          window.removeEventListener('keyup', onKeyUp);
+          app?.canvas.removeEventListener('wheel', onWheel);
         };
-      } catch (error) {
-        console.error('PixiJS initialization failed:', error);
+      } catch (err) {
+        console.error('PixiJS initialization failed:', err);
       }
     };
+
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Shift') isShiftDownRef.current = true; };
+    const onKeyUp = (e: KeyboardEvent) => { if (e.key === 'Shift') isShiftDownRef.current = false; };
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
 
     initApp();
 
     return () => {
       isMounted = false;
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
       if (app) {
         if ((app as any)._unityCleanup) (app as any)._unityCleanup();
-        try { app.destroy(true, { children: true, texture: true }); } 
-        catch (e) { console.warn('PixiJS destroy warning:', e); }
+        app.destroy(true, { children: true, texture: true });
         appRef.current = null;
       }
     };
-  },[]);
+  }, []);
 
   useEffect(() => {
     if (gridGraphicsRef.current) drawGrid(gridGraphicsRef.current, !!showGuides);
@@ -330,9 +315,9 @@ export const UnityCanvas: React.FC<UnityCanvasProps> = ({
 
   const getTexture = (url: string): Promise<PIXI.Texture> => {
     if (textureCacheRef.current.has(url)) return textureCacheRef.current.get(url)!;
-    const promise = PIXI.Assets.load(url);
-    textureCacheRef.current.set(url, promise);
-    return promise;
+    const p = PIXI.Assets.load(url);
+    textureCacheRef.current.set(url, p);
+    return p;
   };
 
   const renderUnits = useCallback((container: PIXI.Container, unitsData: Unit[]) => {
@@ -345,82 +330,29 @@ export const UnityCanvas: React.FC<UnityCanvasProps> = ({
         spritesRef.current.delete(id);
       }
     }
-    const ownedUnits = unitsData.filter(u => u.owner_id);
-    for (let i = 0; i < ownedUnits.length; i++) {
-      const unit = ownedUnits[i];
-      const x = unit.x * UNIT_SIZE;
-      const y = unit.y * UNIT_SIZE;
+    const owned = unitsData.filter(u => u.owner_id);
+    for (let unit of owned) {
       let sprite = spritesRef.current.get(unit.id);
-      if (sprite) {
-        const isCurrentlySprite = sprite instanceof PIXI.Sprite;
-        const shouldBeSprite = !!(unit.metadata.image_url);
-        if (isCurrentlySprite !== shouldBeSprite) {
-          container.removeChild(sprite);
-          sprite.destroy({ children: true, texture: true });
-          sprite = undefined;
-          spritesRef.current.delete(unit.id);
-        }
-      }
       if (!sprite) {
-        if (unit.metadata.image_url && typeof unit.metadata.image_url === 'string' && unit.metadata.image_url.trim() !== '') {
-          const imageUrl = unit.metadata.image_url;
-          const newSprite = new PIXI.Sprite(PIXI.Texture.WHITE);
-          newSprite.width = UNIT_SIZE;
-          newSprite.height = UNIT_SIZE;
-          newSprite.x = x;
-          newSprite.y = y;
-          newSprite.alpha = 0;
-          const animateAlpha = () => {
-            if (newSprite.alpha < 1) {
-              newSprite.alpha = Math.min(1, newSprite.alpha + 0.05);
-              requestAnimationFrame(animateAlpha);
-            }
-          };
-          animateAlpha();
-          getTexture(imageUrl).then((baseTexture) => {
-            if (!spritesRef.current.has(unit.id) || spritesRef.current.get(unit.id) !== newSprite) return;
-            if (baseTexture.source) baseTexture.source.scaleMode = 'nearest';
+        if (unit.metadata.image_url) {
+          const s = new PIXI.Sprite(PIXI.Texture.WHITE);
+          s.width = s.height = UNIT_SIZE;
+          s.x = unit.x * UNIT_SIZE; s.y = unit.y * UNIT_SIZE;
+          getTexture(unit.metadata.image_url).then(tex => {
+            if (tex.source) tex.source.scaleMode = 'nearest';
             if (unit.metadata.group) {
               const { minX, minY, maxX, maxY } = unit.metadata.group;
-              const groupW = maxX - minX + 1;
-              const groupH = maxY - minY + 1;
-              const localX = unit.x - minX;
-              const localY = unit.y - minY;
-              const updateFrame = () => {
-                const source = baseTexture?.source;
-                if (source && source.width > 0 && source.height > 0) {
-                  const frameW = source.width / groupW;
-                  const frameH = source.height / groupH;
-                  newSprite.texture = new PIXI.Texture({
-                    source: source,
-                    frame: new PIXI.Rectangle(localX * frameW, localY * frameH, frameW, frameH)
-                  });
-                }
-              };
-              if (baseTexture.source) {
-                baseTexture.source.on('update', updateFrame);
-                if (baseTexture.source.width > 0) updateFrame();
-              }
-            } else {
-              newSprite.texture = baseTexture;
-            }
-          }).catch(err => console.error('Failed to load unit texture:', err));
-          container.addChild(newSprite);
-          spritesRef.current.set(unit.id, newSprite);
+              const frameW = tex.source.width / (maxX - minX + 1);
+              const frameH = tex.source.height / (maxY - minY + 1);
+              s.texture = new PIXI.Texture({ source: tex.source, frame: new PIXI.Rectangle((unit.x - minX) * frameW, (unit.y - minY) * frameH, frameW, frameH) });
+            } else s.texture = tex;
+          });
+          container.addChild(s);
+          spritesRef.current.set(unit.id, s);
         } else {
-          const rect = new PIXI.Graphics();
-          rect.rect(x, y, UNIT_SIZE, UNIT_SIZE);
-          rect.fill(0xFF5733);
-          rect.alpha = 0;
-          const animateAlpha = () => {
-            if (rect.alpha < 1) {
-              rect.alpha = Math.min(1, rect.alpha + 0.05);
-              requestAnimationFrame(animateAlpha);
-            }
-          };
-          animateAlpha();
-          container.addChild(rect);
-          spritesRef.current.set(unit.id, rect);
+          const g = new PIXI.Graphics().rect(unit.x * UNIT_SIZE, unit.y * UNIT_SIZE, UNIT_SIZE, UNIT_SIZE).fill(0xFF5733);
+          container.addChild(g);
+          spritesRef.current.set(unit.id, g);
         }
       }
     }
@@ -431,114 +363,66 @@ export const UnityCanvas: React.FC<UnityCanvasProps> = ({
   }, [units, renderUnits]);
 
   useEffect(() => {
-    const app = appRef.current;
     const viewport = viewportRef.current;
-    if (!app || !viewport) return;
-    const getUnitAt = (globalPos: PIXI.PointData) => {
-      const localPos = viewport.toLocal(globalPos);
-      const gridX = Math.floor(localPos.x / UNIT_SIZE);
-      const gridY = Math.floor(localPos.y / UNIT_SIZE);
-      if (gridX < 0 || gridX >= GRID_SIZE || gridY < 0 || gridY >= GRID_SIZE) return null;
-      return unitsRef.current[gridY * GRID_SIZE + gridX] || null;
+    if (!viewport) return;
+    const getAt = (global: PIXI.PointData) => {
+      const lp = viewport.toLocal(global);
+      const gx = Math.floor(lp.x / UNIT_SIZE), gy = Math.floor(lp.y / UNIT_SIZE);
+      if (gx < 0 || gx >= GRID_SIZE || gy < 0 || gy >= GRID_SIZE) return null;
+      return unitsRef.current[gy * GRID_SIZE + gx] || null;
     };
-    const handlePointerMove = (e: PIXI.FederatedPointerEvent) => onUnitHover(getUnitAt(e.global));
-    const handlePointerTap = (e: PIXI.FederatedPointerEvent) => {
-      const unit = getUnitAt(e.global);
-      if (unit) onUnitClick(unit, e.shiftKey || isSelectionModeRef.current, { x: e.global.x, y: e.global.y });
+    const onMove = (e: PIXI.FederatedPointerEvent) => onUnitHover(getAt(e.global));
+    const onTap = (e: PIXI.FederatedPointerEvent) => {
+      const u = getAt(e.global);
+      if (u) onUnitClick(u, e.shiftKey || isSelectionModeRef.current, { x: e.global.x, y: e.global.y });
     };
-    const handlePointerOut = () => onUnitHover(null);
     viewport.interactive = true;
-    viewport.on('pointermove', handlePointerMove);
-    viewport.on('pointertap', handlePointerTap);
-    viewport.on('pointerout', handlePointerOut);
-    return () => {
-      viewport.off('pointermove', handlePointerMove);
-      viewport.off('pointertap', handlePointerTap);
-      viewport.off('pointerout', handlePointerOut);
-    };
+    viewport.on('pointermove', onMove).on('pointertap', onTap).on('pointerout', () => onUnitHover(null));
+    return () => { viewport.off('pointermove', onMove).off('pointertap', onTap).off('pointerout'); };
   }, [onUnitHover, onUnitClick]);
 
   useEffect(() => {
     if (!selectionGraphicsRef.current || !previewSpriteRef.current) return;
-    const g = selectionGraphicsRef.current;
-    const p = previewSpriteRef.current;
-    const app = appRef.current; 
+    const g = selectionGraphicsRef.current, p = previewSpriteRef.current, app = appRef.current;
     let elapsed = 0;
-    const pulse = (ticker: PIXI.Ticker) => {
-      elapsed += ticker.deltaTime;
-      g.alpha = 0.6 + Math.sin(elapsed * 0.1) * 0.4;
-    };
+    const pulse = (t: PIXI.Ticker) => { elapsed += t.deltaTime; g.alpha = 0.6 + Math.sin(elapsed * 0.1) * 0.4; };
     if (app && selectedUnitIds.length > 0) app.ticker.add(pulse);
-    g.clear();
-    p.visible = false;
-    if (selectedUnitIds.length === 0) {
-      if (app) app.ticker.remove(pulse); 
-      return;
-    }
-    const selectedSet = new Set(selectedUnitIds);
-    const selectedUnitsData = units.filter(u => selectedSet.has(u.id));
+    g.clear(); p.visible = false;
+    if (selectedUnitIds.length === 0) { if (app) app.ticker.remove(pulse); return; }
+    const sel = units.filter(u => selectedUnitIds.includes(u.id));
     g.setStrokeStyle({ width: 2, color: 0xFFFFFF });
-    selectedUnitsData.forEach(unit => {
-      const x = unit.x * UNIT_SIZE;
-      const y = unit.y * UNIT_SIZE;
-      const hasLeft = selectedUnitsData.some(u => u.x === unit.x - 1 && u.y === unit.y);
-      const hasRight = selectedUnitsData.some(u => u.x === unit.x + 1 && u.y === unit.y);
-      const hasTop = selectedUnitsData.some(u => u.x === unit.x && u.y === unit.y - 1);
-      const hasBottom = selectedUnitsData.some(u => u.x === unit.x && u.y === unit.y + 1);
-      if (!hasLeft) { g.moveTo(x, y); g.lineTo(x, y + UNIT_SIZE); }
-      if (!hasRight) { g.moveTo(x + UNIT_SIZE, y); g.lineTo(x + UNIT_SIZE, y + UNIT_SIZE); }
-      if (!hasTop) { g.moveTo(x, y); g.lineTo(x + UNIT_SIZE, y); }
-      if (!hasBottom) { g.moveTo(x, y + UNIT_SIZE); g.lineTo(x + UNIT_SIZE, y + UNIT_SIZE); }
+    sel.forEach(u => {
+      const x = u.x * UNIT_SIZE, y = u.y * UNIT_SIZE;
+      if (!sel.some(s => s.x === u.x - 1 && s.y === u.y)) { g.moveTo(x, y); g.lineTo(x, y + UNIT_SIZE); }
+      if (!sel.some(s => s.x === u.x + 1 && s.y === u.y)) { g.moveTo(x + UNIT_SIZE, y); g.lineTo(x + UNIT_SIZE, y + UNIT_SIZE); }
+      if (!sel.some(s => s.x === u.x && s.y === u.y - 1)) { g.moveTo(x, y); g.lineTo(x + UNIT_SIZE, y); }
+      if (!sel.some(s => s.x === u.x && s.y === u.y + 1)) { g.moveTo(x, y + UNIT_SIZE); g.lineTo(x + UNIT_SIZE, y + UNIT_SIZE); }
     });
     g.stroke();
-    let isCurrent = true;
-    if (pendingImage && pendingImage.trim() !== '') {
-      const minX = Math.min(...selectedUnitsData.map(u => u.x));
-      const minY = Math.min(...selectedUnitsData.map(u => u.y));
-      const maxX = Math.max(...selectedUnitsData.map(u => u.x));
-      const maxY = Math.max(...selectedUnitsData.map(u => u.y));
-      const loadPreview = async () => {
-        try {
-          const texture = await PIXI.Assets.load(pendingImage);
-          if (!isCurrent || !p) return;
-          p.texture = texture;
-          p.x = minX * UNIT_SIZE; p.y = minY * UNIT_SIZE;
-          p.width = (maxX - minX + 1) * UNIT_SIZE; p.height = (maxY - minY + 1) * UNIT_SIZE;
-          p.alpha = 0.7; p.visible = true;
-        } catch (e) { console.error('Failed to load preview texture:', e); }
-      };
-      loadPreview();
+    if (pendingImage) {
+      const minX = Math.min(...sel.map(u => u.x)), minY = Math.min(...sel.map(u => u.y)), maxX = Math.max(...sel.map(u => u.x)), maxY = Math.max(...sel.map(u => u.y));
+      PIXI.Assets.load(pendingImage).then(tex => {
+        p.texture = tex; p.x = minX * UNIT_SIZE; p.y = minY * UNIT_SIZE;
+        p.width = (maxX - minX + 1) * UNIT_SIZE; p.height = (maxY - minY + 1) * UNIT_SIZE;
+        p.alpha = 0.7; p.visible = true;
+      });
     }
-    return () => {
-      if (app) app.ticker.remove(pulse); 
-      isCurrent = false;
-    };
+    return () => { if (app) app.ticker.remove(pulse); };
   }, [selectedUnitIds, units, pendingImage]);
 
   useEffect(() => {
-    const app = appRef.current;
-    const viewport = viewportRef.current;
-    if (!app || !viewport || focusUnitId === null || focusUnitId === undefined) return;
-    const unit = unitsRef.current[focusUnitId];
-    if (!unit) return;
-    const targetX = (app.screen.width / 2) - (unit.x * UNIT_SIZE * viewport.scale.x) - ((UNIT_SIZE * viewport.scale.x) / 2);
-    const targetY = (app.screen.height / 2) - (unit.y * UNIT_SIZE * viewport.scale.y) - ((UNIT_SIZE * viewport.scale.y) / 2);
-    const ticker = app.ticker;
-    const animatePan = () => {
-      const dx = targetX - viewport.x;
-      const dy = targetY - viewport.y;
-      viewport.x += dx * 0.1; viewport.y += dy * 0.1;
-      if (Math.abs(dx) < 1 && Math.abs(dy) < 1) ticker.remove(animatePan);
+    const app = appRef.current, vp = viewportRef.current;
+    if (!app || !vp || focusUnitId == null) return;
+    const u = unitsRef.current[focusUnitId]; if (!u) return;
+    const tx = (app.screen.width/2) - (u.x * UNIT_SIZE * vp.scale.x) - ((UNIT_SIZE * vp.scale.x)/2);
+    const ty = (app.screen.height/2) - (u.y * UNIT_SIZE * vp.scale.y) - ((UNIT_SIZE * vp.scale.y)/2);
+    const pan = () => {
+      const dx = tx - vp.x, dy = ty - vp.y; vp.x += dx * 0.1; vp.y += dy * 0.1;
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1) app.ticker.remove(pan);
     };
-    ticker.add(animatePan);
-    return () => ticker.remove(animatePan);
+    app.ticker.add(pan);
+    return () => app.ticker.remove(pan);
   }, [focusUnitId]);
 
-  return (
-    <div 
-      ref={containerRef} 
-      className="w-full h-full cursor-crosshair overflow-hidden bg-[#0A0A0A] touch-none"
-      style={{ touchAction: 'none' }}
-    />
-  );
+  return <div ref={containerRef} className="w-full h-full cursor-crosshair overflow-hidden bg-[#0A0A0A] touch-none" style={{ touchAction: 'none' }} />;
 };
