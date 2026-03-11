@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as PIXI from 'pixi.js';
+import { Plus, Minus } from 'lucide-react';
 
 interface Unit {
   id: number;
@@ -38,6 +39,9 @@ interface UnityCanvasProps {
 const GRID_SIZE = 100;
 const UNIT_SIZE = 10;
 const CANVAS_SIZE = GRID_SIZE * UNIT_SIZE;
+// ОГРАНИЧЕНИЯ МАСШТАБА (Чтобы сетка не пропадала)
+const MIN_ZOOM = 0.3;
+const MAX_ZOOM = 10;
 
 export const UnityCanvas: React.FC<UnityCanvasProps> = ({ 
   units, selectedUnitIds, pendingImage, isSelectionMode, focusUnitId, viewportDataRef,
@@ -53,6 +57,7 @@ export const UnityCanvas: React.FC<UnityCanvasProps> = ({
   const marqueeGraphicsRef = useRef<PIXI.Graphics | null>(null);
   const previewSpriteRef = useRef<PIXI.Sprite | null>(null);
   
+  const zoomTickerRef = useRef<((ticker: PIXI.Ticker) => void) | null>(null);
   const unitsRef = useRef(units);
 
   useEffect(() => {
@@ -147,7 +152,6 @@ export const UnityCanvas: React.FC<UnityCanvasProps> = ({
 
         drawGrid(gridGraphics, !!showGuides);
 
-        // --- МОБИЛЬНАЯ ЛОГИКА ---
         let lastPinchDist = 0;
         let lastPos = { x: 0, y: 0 };
         const activePointers = new Map<number, { x: number, y: number }>();
@@ -196,8 +200,11 @@ export const UnityCanvas: React.FC<UnityCanvasProps> = ({
               const globalMid = getGlobalPos(midX, midY);
               if (isNaN(globalMid.x) || isNaN(globalMid.y)) return;
               const worldMid = viewport.toLocal(globalMid);
-              const newScale = Math.max(0.15, Math.min(10, viewport.scale.x * zoomFactor));
+              
+              // ПРИМЕНИЛИ ОГРАНИЧЕНИЯ ДЛЯ ПАЛЬЦЕВ
+              const newScale = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, viewport.scale.x * zoomFactor));
               viewport.scale.set(newScale);
+              
               const newGlobalMid = viewport.toGlobal(worldMid);
               viewport.x += globalMid.x - newGlobalMid.x;
               viewport.y += globalMid.y - newGlobalMid.y;
@@ -253,7 +260,10 @@ export const UnityCanvas: React.FC<UnityCanvasProps> = ({
           e.preventDefault();
           const factor = e.deltaY > 0 ? 0.9 : 1.1;
           const worldPos = viewport.toLocal(app!.renderer.events.pointer.global);
-          viewport.scale.set(Math.max(0.1, Math.min(10, viewport.scale.x * factor)));
+          
+          // ПРИМЕНИЛИ ОГРАНИЧЕНИЯ ДЛЯ КОЛЕСИКА
+          viewport.scale.set(Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, viewport.scale.x * factor)));
+          
           const newGlobal = viewport.toGlobal(worldPos);
           viewport.x += app!.renderer.events.pointer.global.x - newGlobal.x;
           viewport.y += app!.renderer.events.pointer.global.y - newGlobal.y;
@@ -424,5 +434,96 @@ export const UnityCanvas: React.FC<UnityCanvasProps> = ({
     return () => app.ticker.remove(pan);
   }, [focusUnitId]);
 
-  return <div ref={containerRef} className="w-full h-full cursor-crosshair overflow-hidden bg-[#0A0A0A] touch-none" style={{ touchAction: 'none' }} />;
+  // ПОЛНОСТЬЮ ИСПРАВЛЕННАЯ ФУНКЦИЯ ПЛАВНОГО ЗУМА
+  const handleZoom = (direction: 'in' | 'out') => {
+    const app = appRef.current;
+    const viewport = viewportRef.current;
+    if (!app || !viewport) return;
+
+    const zoomStep = 1.5;
+    
+    // Рассчитываем целевой масштаб с жесткими лимитами
+    const targetScale = direction === 'in' 
+      ? Math.min(MAX_ZOOM, viewport.scale.x * zoomStep)
+      : Math.max(MIN_ZOOM, viewport.scale.x / zoomStep);
+
+    // Если уперлись в лимит - выходим
+    if (targetScale === viewport.scale.x) return;
+
+    const screenCenterX = app.screen.width / 2;
+    const screenCenterY = app.screen.height / 2;
+    const screenCenter = { x: screenCenterX, y: screenCenterY };
+    
+    // Определяем, на какую точку мира мы сейчас смотрим по центру экрана
+    const worldCenter = viewport.toLocal(screenCenter);
+
+    // Сохраняем текущие значения перед "хаком"
+    const startScale = viewport.scale.x;
+    const startX = viewport.x;
+    const startY = viewport.y;
+
+    // Временный хак: ставим целевой масштаб, чтобы движок Pixi сам посчитал нужные координаты
+    viewport.scale.set(targetScale);
+    const newGlobalCenter = viewport.toGlobal(worldCenter);
+    
+    // Вот идеальные X и Y, при которых центр остается в центре
+    const targetX = startX + (screenCenterX - newGlobalCenter.x);
+    const targetY = startY + (screenCenterY - newGlobalCenter.y);
+
+    // Возвращаем все назад, чтобы начать анимацию
+    viewport.scale.set(startScale);
+
+    if (zoomTickerRef.current) {
+      app.ticker.remove(zoomTickerRef.current);
+    }
+
+    const animateZoom = () => {
+      const ds = targetScale - viewport.scale.x;
+      const dx = targetX - viewport.x;
+      const dy = targetY - viewport.y;
+
+      viewport.scale.set(viewport.scale.x + ds * 0.15);
+      viewport.x += dx * 0.15;
+      viewport.y += dy * 0.15;
+
+      if (Math.abs(ds) < 0.005 && Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) {
+        viewport.scale.set(targetScale);
+        viewport.x = targetX;
+        viewport.y = targetY;
+        app.ticker.remove(animateZoom);
+        zoomTickerRef.current = null;
+      }
+    };
+
+    zoomTickerRef.current = animateZoom;
+    app.ticker.add(animateZoom);
+
+    if (onInteraction) onInteraction();
+  };
+
+  return (
+    <div className="relative w-full h-full pointer-events-none">
+      <div 
+        ref={containerRef} 
+        className="absolute inset-0 cursor-crosshair overflow-hidden bg-[#0A0A0A] touch-none pointer-events-auto" 
+        style={{ touchAction: 'none' }} 
+      />
+
+      {/* КНОПКИ ЗУМА */}
+      <div className="absolute right-4 bottom-28 flex flex-col gap-3 z- sm:hidden pointer-events-auto">
+        <button 
+          onClick={(e) => { e.stopPropagation(); handleZoom('in'); }}
+          className="flex items-center justify-center bg-[#141414]/80 backdrop-blur-md border border-[#262626] p-3 text-gray-400 hover:text-white hover:border-[#FF5733] transition-colors shadow-lg active:scale-95"
+        >
+          <Plus size={18} />
+        </button>
+        <button 
+          onClick={(e) => { e.stopPropagation(); handleZoom('out'); }}
+          className="flex items-center justify-center bg-[#141414]/80 backdrop-blur-md border border-[#262626] p-3 text-gray-400 hover:text-white hover:border-[#FF5733] transition-colors shadow-lg active:scale-95"
+        >
+          <Minus size={18} />
+        </button>
+      </div>
+    </div>
+  );
 };
