@@ -63,7 +63,6 @@ export default function App() {
   const [isForSale, setIsForSale] = useState<boolean>(false);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   
-  // --- ВОЗВРАЩАЕМ СТЕЙТ МЕНЮ ---
   const [activeMenu, setActiveMenu] = useState<{ unit: Unit, x: number, y: number } | null>(null);
   
   const [searchQuery, setSearchQuery] = useState('');
@@ -82,7 +81,6 @@ export default function App() {
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
 
-  // Admin State
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [adminStats, setAdminStats] = useState<any>(null);
   const [adminUsers, setAdminUsers] = useState<any[]>([]);
@@ -189,16 +187,16 @@ export default function App() {
       const avgPrice = selectedUnits.reduce((sum, u) => sum + u.sale_price, 0) / selectedUnitIds.length;
       setResalePrice(Number((avgPrice * 1.2).toFixed(2)));
       
-      if (user && selectedUnitIds.length === 1 && selectedUnits.length === 1 && selectedUnits[0]?.owner_id === user.id) {
-        setPendingLink(selectedUnits[0].metadata.link || '');
-        setIsForSale(!!selectedUnits[0].metadata.is_for_sale);
+      if (user && selectedUnitIds.length === 1 && selectedUnits.length === 1 && selectedUnits?.owner_id === user.id) {
+        setPendingLink(selectedUnits.metadata.link || '');
+        setIsForSale(!!selectedUnits.metadata.is_for_sale);
       } else {
         setIsForSale(false);
       }
     }
   }, [selectedUnitIds.length]); 
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     
@@ -228,8 +226,7 @@ export default function App() {
     });
   };
 
-const handleUnitClick = (unit: Unit, shiftKey: boolean, position?: { x: number, y: number }) => {
-    // 1. Логика для ПК (зажат SHIFT): Выделяем ПРЯМОУГОЛЬНИКОМ
+  const handleUnitClick = (unit: Unit, shiftKey: boolean, position?: { x: number, y: number }) => {
     if (shiftKey && selectedUnitIds.length > 0) {
       setActiveMenu(null);
       const anchor = units.find(u => u.id === selectedUnitIds);
@@ -248,7 +245,6 @@ const handleUnitClick = (unit: Unit, shiftKey: boolean, position?: { x: number, 
       }
     }
 
-    // 2. Логика для Выделения (Selection Mode или клик по одному)
     if (isSelectionMode) {
       setActiveMenu(null);
       setSelectedUnitIds(prev => 
@@ -259,7 +255,6 @@ const handleUnitClick = (unit: Unit, shiftKey: boolean, position?: { x: number, 
       return;
     }
 
-    // 3. Обычный клик
     if (unit.owner_id && position) {
       setActiveMenu({ unit, x: position.x, y: position.y });
       setSelectedUnitIds([unit.id]);
@@ -290,7 +285,7 @@ const handleUnitClick = (unit: Unit, shiftKey: boolean, position?: { x: number, 
           metadata: pendingImage || pendingLink ? {
             title: `Owned by ${user.first_name}`,
             link: pendingLink,
-            image_url: pendingImage || selectedUnits[0].metadata.image_url,
+            image_url: pendingImage || selectedUnits.metadata.image_url,
             is_for_sale: isForSale,
             group: selectedUnitIds.length > 1 ? { minX, minY, maxX, maxY } : undefined
           } : undefined
@@ -311,7 +306,7 @@ const handleUnitClick = (unit: Unit, shiftKey: boolean, position?: { x: number, 
     }
   };
 
-const handleBuy = async () => {
+  const handleBuy = async () => {
     if (!user) {
       setAuthMode('login');
       setShowAuthModal(true);
@@ -410,7 +405,7 @@ const handleBuy = async () => {
       }
 
       setSelectedUnitIds(data.unitIds);
-      setFocusUnitId(data.unitIds[0]); 
+      setFocusUnitId(data.unitIds); 
       
       if (data.unitIds.length > 1) {
         toast.success(`Found ${data.unitIds.length} units`);
@@ -423,7 +418,6 @@ const handleBuy = async () => {
   return (
     <div className="relative w-screen h-screen bg-[#0A0A0A] text-white selection:bg-[#FF5733] selection:text-white">
       {/* Header */}
-     {/* Header */}
       <header className="absolute top-0 left-0 w-full p-4 sm:p-6 z-20 flex justify-between items-start pointer-events-none">
         
         {/* ЛЕВАЯ ЧАСТЬ: Брендинг и Благотворительность */}
@@ -443,9 +437,8 @@ const handleBuy = async () => {
           </div>
         </div>
         
-        {/* ПРАВАЯ ЧАСТЬ: Поиск и Профиль (В одну ровную линию) */}
+        {/* ПРАВАЯ ЧАСТЬ: Поиск и Профиль */}
         <div className="pointer-events-auto flex flex-col sm:flex-row items-end sm:items-center gap-4 sm:gap-6 mt-1">
-          
           <form onSubmit={handleSearch} className="hidden sm:flex relative group">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-[#FF5733] transition-colors" />
             <input 
@@ -496,6 +489,23 @@ const handleBuy = async () => {
         </div>
       </header>
 
+      {/* НОВАЯ ПОДСКАЗКА ДЛЯ МОБИЛЬНЫХ */}
+      <AnimatePresence>
+        {isMobile && isSelectionMode && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="fixed top-32 left-1/2 -translate-x-1/2 z-40 bg-[#FF5733] text-white px-5 py-2.5 rounded-full shadow-2xl pointer-events-none flex items-center gap-2"
+          >
+            <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+            <span className="text-[10px] uppercase tracking-widest font-bold whitespace-nowrap">
+              Drag finger to select
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Main Canvas */}
       <div className="w-full h-full">
         <UnityCanvas 
@@ -513,11 +523,11 @@ const handleBuy = async () => {
         />
       </div>
 
-{/* Selection Mode & Guides Toolbar (Умное позиционирование) */}
-      <div className={`fixed z- flex flex-col gap-2 transition-all duration-300 
+      {/* Selection Mode & Guides Toolbar */}
+      <div className={`fixed z-40 flex flex-col gap-2 transition-all duration-300 
         ${isMobile 
-          ? 'top-1/2 -translate-y-1/2 right-4' // На мобилках: справа по центру
-          : 'bottom-8 left-8'                  // На ПК: как и было, снизу слева
+          ? 'top-1/2 -translate-y-1/2 right-4' 
+          : 'bottom-8 left-8'                  
         }`}>
         
         {/* Кнопка Guides */}
@@ -565,14 +575,14 @@ const handleBuy = async () => {
         )}
       </div>
 
-{/* Hover Info */}
+      {/* Hover Info */}
       <AnimatePresence>
-        {hoveredUnit && ( // Убрал условие, чтобы координаты были видны всегда
+        {hoveredUnit && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 10 }}
-            className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-[#141414] border border-[#262626] p-4 min-w-[200px] z-[60] pointer-events-none"
+            className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-[#141414] border border-[#262626] p-4 min-w-[200px] z-30 pointer-events-none"
           >
             <div className="flex justify-between items-start mb-2">
               <span className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">Unit #{hoveredUnit.id}</span>
@@ -590,7 +600,7 @@ const handleBuy = async () => {
         )}
       </AnimatePresence>
 
-{/* 1. РАДАР: Полностью скрыт на мобилках, виден только на ПК */}
+      {/* РАДАР: Полностью скрыт на мобилках, виден только на ПК */}
       {!isMobile && (
         <Minimap 
           units={units} 
@@ -600,14 +610,13 @@ const handleBuy = async () => {
         />
       )}
 
-      {/* --- РЕНДЕР НОВОГО FLOATING MENU --- */}
+      {/* Floating Menu */}
       <FloatingMenu 
         activeMenu={activeMenu}
         onClose={() => setActiveMenu(null)}
       />
-      {/* ----------------------------------- */}
 
-{/* Сайдбар: на ПК открыт всегда, на мобилке — только после нажатия Setup */}
+      {/* Сайдбар */}
       {selectedUnitIds.length > 0 && (!isMobile || isMobileSidebarOpen) && (
         <Sidebar 
           user={user}
@@ -645,7 +654,7 @@ const handleBuy = async () => {
         {showProfileModal && (
           <motion.div 
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-xl flex items-center justify-center p-4"
+            className="fixed inset-0 z-50 bg-black/90 backdrop-blur-xl flex items-center justify-center p-4"
           >
             <motion.div 
               initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }}
@@ -678,7 +687,7 @@ const handleBuy = async () => {
                     <button 
                       onClick={() => {
                         setSelectedUnitIds(myUnits.map(u => u.id));
-                        setFocusUnitId(myUnits[0].id);
+                        setFocusUnitId(myUnits.id);
                         setShowProfileModal(false);
                       }}
                       className="w-full bg-[#141414] border border-[#262626] hover:border-[#FF5733] hover:text-[#FF5733] text-white py-4 font-bold uppercase tracking-[0.2em] text-xs transition-colors flex items-center justify-center gap-2"
@@ -735,7 +744,7 @@ const handleBuy = async () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-xl flex items-center justify-center p-4"
+            className="fixed inset-0 z-50 bg-black/90 backdrop-blur-xl flex items-center justify-center p-4"
           >
             <motion.div 
               initial={{ scale: 0.9, y: 20 }}
@@ -756,7 +765,6 @@ const handleBuy = async () => {
               </div>
 
               <div className="flex-1 overflow-y-auto p-8 space-y-12">
-                {/* Stats */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="bg-white/5 p-6 rounded-2xl border border-white/5">
                     <BarChart3 className="w-8 h-8 text-[#FF5733] mb-4" />
@@ -775,7 +783,6 @@ const handleBuy = async () => {
                   </div>
                 </div>
 
-                {/* Settings Form */}
                 <div className="space-y-6">
                   <div className="flex items-center gap-2 text-white text-sm font-bold uppercase tracking-widest">
                     <SettingsIcon className="w-4 h-4" />
@@ -816,7 +823,6 @@ const handleBuy = async () => {
                   </button>
                 </div>
 
-                {/* User Management */}
                 <div className="space-y-6">
                   <div className="flex items-center gap-2 text-white text-sm font-bold uppercase tracking-widest">
                     <Users className="w-4 h-4" />
@@ -882,7 +888,7 @@ const handleBuy = async () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
           >
             <motion.div 
               initial={{ scale: 0.9, y: 20 }}
@@ -967,6 +973,7 @@ const handleBuy = async () => {
         )}
       </AnimatePresence>
       <CursorTooltip selectedCount={selectedUnitIds.length} />
+      
       {/* Background Loading Indicator */}
       {isLoading && units.length > 0 && (
         <div className="absolute top-6 left-1/2 -translate-x-1/2 z-50 bg-[#141414] border border-[#262626] px-4 py-2 flex items-center gap-3">
@@ -1035,8 +1042,10 @@ const handleBuy = async () => {
           </div>
         </div>
       )}
+
+      {/* Мобильная панель Setup & Buy */}
       {isMobile && selectedUnitIds.length > 0 && !isMobileSidebarOpen && (
-        <div className="fixed bottom-0 left-0 w-full z- bg-[#141414] border-t border-[#262626] p-4 flex items-center justify-between pb-10 animate-in slide-in-from-bottom duration-300 pointer-events-auto">
+        <div className="fixed bottom-0 left-0 w-full z-40 bg-[#141414] border-t border-[#262626] p-4 flex items-center justify-between pb-10 animate-in slide-in-from-bottom duration-300 pointer-events-auto">
           <div className="flex flex-col">
             <span className="text-[10px] text-[#FF5733] uppercase font-bold tracking-widest">Selected Units</span>
             <span className="text-sm font-bold text-white uppercase">{selectedUnitIds.length} • {totalPrice.toFixed(2)} UNIT</span>
