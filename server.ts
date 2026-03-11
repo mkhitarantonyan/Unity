@@ -66,6 +66,15 @@ db.exec(`
     FOREIGN KEY(unit_id) REFERENCES units(id),
     FOREIGN KEY(buyer_id) REFERENCES users(id)
   );
+  CREATE TABLE IF NOT EXISTS orders (
+    order_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    unit_ids TEXT NOT NULL,
+    amount REAL NOT NULL,
+    metadata TEXT,
+    status TEXT DEFAULT 'pending',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 let cachedGridMap: Map<number, any> | null = null;
@@ -419,11 +428,13 @@ async function startServer() {
     }
   });
 
-  app.post('/api/buy-bulk', async (req, res) => {
-    const result = BuyBulkSchema.safeParse(req.body);
-    if (!result.success) return res.status(400).json({ error: result.error.message });
+// --- НАСТРОЙКИ CRYPTOMUS ---
+  const CRYPTOMUS_MERCHANT_ID = process.env.CRYPTOMUS_MERCHANT_ID || 'твой_merchant_id';
+  const CRYPTOMUS_API_KEY = process.env.CRYPTOMUS_API_KEY || 'твой_api_key';
 
-    const { unitIds, ownerId, metadata, nextSalePrice, initData, paymentId } = result.data;
+  // 1. Создание заказа и ссылки на оплату
+  app.post('/api/buy-bulk-crypto', async (req, res) => {
+    const { unitIds, ownerId, metadata, nextSalePrice, initData } = req.body;
     if (!validateTelegramData(initData)) return res.status(401).json({ error: 'Invalid authentication data' });
 
     try {
@@ -432,55 +443,99 @@ async function startServer() {
       
       if (units.length !== unitIds.length) return res.status(404).json({ error: 'Some units not found' });
       
-      const allForSale = units.every(u => {
-        if (!u.owner_id) return true; 
-        try {
-          const meta = JSON.parse(u.metadata);
-          return meta.is_for_sale === true;
-        } catch (e) {
-          return false;
-        }
-      });
-
-      if (!allForSale) {
-        return res.status(403).json({ error: 'One or more selected units are locked and not for sale.' });
-      }
+      const allForSale = units.every(u => !u.owner_id || JSON.parse(u.metadata || '{}').is_for_sale === true);
+      if (!allForSale) return res.status(403).json({ error: 'One or more units are locked' });
 
       const totalPrice = units.reduce((sum, u) => sum + u.sale_price, 0);
-      const isPaid = await verifyPayment(paymentId, totalPrice);
-      
-      if (!isPaid) return res.status(402).json({ error: 'Payment verification failed.' });
+      const orderId = crypto.randomUUID();
+
+      db.prepare(`INSERT INTO orders (order_id, user_id, unit_ids, amount, metadata, status) VALUES (?, ?, ?, ?, ?, 'pending')`)
+        .run(orderId, ownerId, JSON.stringify(unitIds), totalPrice, JSON.stringify({ ...metadata, nextSalePrice }));
+
+      const payload = {
+        amount: totalPrice.toString(),
+        currency: 'USD',
+        order_id: orderId,
+        url_callback: 'https://твой-домен.com/api/webhook/cryptomus', // ЗАМЕНИ НА СВОЙ БОЕВОЙ ДОМЕН!
+        url_return: 'https://твой-домен.com/',
+        is_payment_multiple: false,
+        lifetime: 3600
+      };
+
+      const dataBuffer = Buffer.from(JSON.stringify(payload)).toString('base64');
+      const sign = crypto.createHash('md5').update(dataBuffer + CRYPTOMUS_API_KEY).digest('hex');
+
+      const response = await fetch('https://api.cryptomus.com/v1/payment', {
+        method: 'POST',
+        headers: { 'merchant': CRYPTOMUS_MERCHANT_ID, 'sign': sign, 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const result = await response.json();
+      if (result.state !== 0) throw new Error(result.message || 'Payment gateway error');
+
+      res.json({ paymentUrl: result.result.url });
+    } catch (error) {
+      console.error('Crypto order error:', error);
+      res.status(500).json({ error: 'Failed to create payment link' });
+    }
+  });
+
+  // 2. Webhook (Сюда Cryptomus постучится об успешной оплате)
+  app.post('/api/webhook/cryptomus', express.json(), async (req, res) => {
+    const { sign } = req.body;
+    if (!sign) return res.status(400).send('No signature');
+
+    const bodyWithoutSign = { ...req.body };
+    delete bodyWithoutSign.sign;
+    
+    const payloadBuffer = Buffer.from(JSON.stringify(bodyWithoutSign)).toString('base64');
+    const expectedSign = crypto.createHash('md5').update(payloadBuffer + CRYPTOMUS_API_KEY).digest('hex');
+
+    if (sign !== expectedSign) return res.status(403).send('Invalid signature');
+
+    const { order_id, status } = req.body;
+    if (status !== 'paid' && status !== 'paid_over') return res.status(200).send('Ignored status');
+
+    try {
+      const order = db.prepare('SELECT * FROM orders WHERE order_id = ? AND status = "pending"').get(order_id) as any;
+      if (!order) return res.status(200).send('Order already processed or not found');
+
+      const unitIds = JSON.parse(order.unit_ids);
+      const meta = JSON.parse(order.metadata);
+      const placeholders = unitIds.map(() => '?').join(',');
+      const units = db.prepare(`SELECT * FROM units WHERE id IN (${placeholders})`).all(...unitIds) as any[];
 
       const update = db.prepare(`UPDATE units SET owner_id = ?, current_price = sale_price, sale_price = ?, metadata = ? WHERE id = ?`);
       const historyInsert = db.prepare('INSERT INTO unit_history (unit_id, buyer_id, price) VALUES (?, ?, ?)');
-      
-      let appliedNextPrice = 1.0;
 
-      const buyMany = db.transaction((owner: string, meta: any, total: number, nextPrice?: number) => {
+      const processTransaction = db.transaction(() => {
+        db.prepare('UPDATE orders SET status = "completed" WHERE order_id = ?').run(order_id);
+        
+        let appliedNextPrice = 1.0;
         for (const unit of units) {
           const minNext = unit.sale_price * 1.2;
           const maxNext = unit.sale_price * 2.0;
-          const finalNext = Math.max(minNext, Math.min(maxNext, nextPrice || minNext));
+          const finalNext = Math.max(minNext, Math.min(maxNext, meta.nextSalePrice || minNext));
           appliedNextPrice = finalNext;
-          update.run(owner, finalNext, JSON.stringify(meta), unit.id);
           
-
-          historyInsert.run(unit.id, owner, unit.sale_price);
+          update.run(order.user_id, finalNext, JSON.stringify(meta), unit.id);
+          historyInsert.run(unit.id, order.user_id, unit.sale_price);
         }
-        db.prepare('INSERT INTO transactions (id, user_id, amount) VALUES (?, ?, ?)').run(crypto.randomUUID(), owner, total);
+        db.prepare('INSERT INTO transactions (id, user_id, amount) VALUES (?, ?, ?)').run(crypto.randomUUID(), order.user_id, order.amount);
       });
 
-      buyMany(ownerId, metadata, totalPrice, nextSalePrice);
-      updateCacheForUnits(units, ownerId, appliedNextPrice, metadata); 
-      
-      unitIds.forEach(id => {
-        const u = cachedGridMap!.get(id);
-        if (u) pendingGridUpdates.set(id, u);
-      });
+      processTransaction();
 
-      res.json({ success: true });
+      // Обновляем сетку
+      const updatedUnits = db.prepare(`SELECT * FROM units WHERE id IN (${placeholders})`).all(...unitIds);
+      updateCacheForUnits(updatedUnits, order.user_id, meta.nextSalePrice || updatedUnits[0].sale_price * 1.2, meta);
+      updatedUnits.forEach(u => pendingGridUpdates.set(u.id, u));
+
+      res.status(200).send('OK');
     } catch (error) {
-      res.status(500).json({ error: 'Transaction failed' });
+      console.error('Webhook processing error:', error);
+      res.status(500).send('Server Error');
     }
   });
 

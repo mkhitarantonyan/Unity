@@ -299,7 +299,7 @@ export default function App() {
     }
   };
 
-  const handleBuy = async () => {
+const handleBuy = async () => {
     if (!user) {
       setAuthMode('login');
       setShowAuthModal(true);
@@ -317,9 +317,7 @@ export default function App() {
     const maxY = Math.max(...selectedUnits.map(u => u.y));
 
     try {
-      const paymentId = `TEST_${Date.now()}`;
-      
-      const response = await fetch('/api/buy-bulk', {
+      const response = await fetch('/api/buy-bulk-crypto', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -327,7 +325,6 @@ export default function App() {
           ownerId: user.id,
           initData: getAuthData(),
           nextSalePrice: resalePrice,
-          paymentId,
           metadata: {
             title: `Owned by ${user.first_name}`,
             link: pendingLink,
@@ -338,16 +335,16 @@ export default function App() {
         })
       });
 
-      if (response.ok) {
-        await refresh();
-        setSelectedUnitIds([]);
-        toast.success(`Successfully purchased ${selectedUnitIds.length} units!`);
+      const data = await response.json();
+
+      if (response.ok && data.paymentUrl) {
+        toast.success('Redirecting to secure payment...');
+        window.location.href = data.paymentUrl; 
       } else {
-        const error = await response.json();
-        toast.error(error.error || 'Transaction failed');
+        toast.error(data.error || 'Transaction failed');
       }
-    } catch (error) {
-      toast.error('Network error');
+    } catch (error: any) {
+      toast.error(error?.message || 'Network error');
     } finally {
       setIsBuying(false);
     }
