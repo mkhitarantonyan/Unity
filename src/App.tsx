@@ -5,6 +5,7 @@ import { UnityCanvas } from './components/UnityCanvas';
 import { Sidebar } from './components/Sidebar';
 import { Minimap } from './components/Minimap';
 import { FloatingMenu } from './components/FloatingMenu';
+import { CursorTooltip } from './components/CursorTooltip';
 import { processImage } from './utils/image';
 import { MousePointer2, BoxSelect, LogIn, LogOut, X, Shield, Users, Settings as SettingsIcon, BarChart3, Trash2, Lock, Unlock, Image as ImageIcon, Search, Heart } from 'lucide-react';
 import { useGrid, Unit } from './hooks/useGrid';
@@ -35,17 +36,18 @@ export default function App() {
   const [showGuides, setShowGuides] = useState(false);
   const [forceShow, setForceShow] = useState(false);
   const [forceHideLoading, setForceHideLoading] = useState(false);
-
-const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      setMousePos({ x: e.clientX, y: e.clientY });
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+      if (window.innerWidth >= 768) setIsMobileSidebarOpen(false);
     };
-    window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
-  
+
   useEffect(() => {
     const timer = setTimeout(() => setForceShow(true), 3000);
     return () => clearTimeout(timer);
@@ -585,35 +587,38 @@ const handleBuy = async () => {
       />
       {/* ----------------------------------- */}
 
-      <Sidebar 
-        user={user}
-        selectedUnitIds={selectedUnitIds}
-        setSelectedUnitIds={setSelectedUnitIds}
-        selectedUnits={selectedUnits}
-        totalPrice={totalPrice}
-        isOwner={isOwner}
-        pendingImage={pendingImage}
-        setPendingImage={setPendingImage}
-        pendingLink={pendingLink}
-        setPendingLink={setPendingLink}
-        resalePrice={resalePrice}
-        setResalePrice={setResalePrice}
-        isForSale={isForSale} 
-        setIsForSale={setIsForSale}
-        canBuy={canBuy}
-        handleImageUpload={handleImageUpload}
-        handleUpdatePrice={handleUpdatePrice}
-        handleBuy={handleBuy}
-        isUpdatingPrice={isUpdatingPrice}
-        isBuying={isBuying}
-        settings={settings}
-        onLoginClick={() => {
-          setAuthMode('login');
-          setShowAuthModal(true);
-        }}
-        handleModerateUnit={handleModerateUnit}
-        handleResetUnits={handleResetUnits}
-      />
+{/* Сайдбар: на ПК открыт всегда, на мобилке — только после нажатия Setup */}
+      {selectedUnitIds.length > 0 && (!isMobile || isMobileSidebarOpen) && (
+        <Sidebar 
+          user={user}
+          selectedUnitIds={selectedUnitIds}
+          setSelectedUnitIds={setSelectedUnitIds}
+          selectedUnits={selectedUnits}
+          totalPrice={totalPrice}
+          isOwner={isOwner}
+          pendingImage={pendingImage}
+          setPendingImage={setPendingImage}
+          pendingLink={pendingLink}
+          setPendingLink={setPendingLink}
+          resalePrice={resalePrice}
+          setResalePrice={setResalePrice}
+          isForSale={isForSale} 
+          setIsForSale={setIsForSale}
+          canBuy={canBuy}
+          handleImageUpload={handleImageUpload}
+          handleUpdatePrice={handleUpdatePrice}
+          handleBuy={handleBuy}
+          isUpdatingPrice={isUpdatingPrice}
+          isBuying={isBuying}
+          settings={settings}
+          onLoginClick={() => {
+            setAuthMode('login');
+            setShowAuthModal(true);
+          }}
+          handleModerateUnit={handleModerateUnit}
+          handleResetUnits={handleResetUnits}
+        />
+      )}
 
       {/* Profile Modal */}
       <AnimatePresence>
@@ -941,17 +946,7 @@ const handleBuy = async () => {
           </motion.div>
         )}
       </AnimatePresence>
-      {selectedUnitIds.length === 1 && (
-        <div
-          className="fixed pointer-events-none z- bg-black text-white px-3 py-1.5 text-[10px] font-mono uppercase border border-white/20 tracking-widest shadow-xl"
-          style={{
-            left: mousePos.x + 16,
-            top: mousePos.y + 16,
-          }}
-        >
-          Hold [SHIFT] to multi-select
-        </div>
-      )}
+      <CursorTooltip selectedCount={selectedUnitIds.length} />
       {/* Background Loading Indicator */}
       {isLoading && units.length > 0 && (
         <div className="absolute top-6 left-1/2 -translate-x-1/2 z-50 bg-[#141414] border border-[#262626] px-4 py-2 flex items-center gap-3">
@@ -1017,6 +1012,28 @@ const handleBuy = async () => {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+      {isMobile && selectedUnitIds.length > 0 && !isMobileSidebarOpen && (
+        <div className="fixed bottom-0 left-0 w-full z- bg-[#141414] border-t border-[#262626] p-4 flex items-center justify-between pb-10 animate-in slide-in-from-bottom duration-300 pointer-events-auto">
+          <div className="flex flex-col">
+            <span className="text-[10px] text-[#FF5733] uppercase font-bold tracking-widest">Selected Units</span>
+            <span className="text-sm font-bold text-white uppercase">{selectedUnitIds.length} • {totalPrice.toFixed(2)} UNIT</span>
+          </div>
+          <div className="flex gap-2">
+            <button 
+              onClick={() => setSelectedUnitIds([])}
+              className="px-4 py-2 text-[10px] uppercase font-bold text-gray-500 border border-[#262626]"
+            >
+              Clear
+            </button>
+            <button 
+              onClick={() => setIsMobileSidebarOpen(true)}
+              className="bg-[#FF5733] text-white px-6 py-2 text-[10px] uppercase font-bold"
+            >
+              Setup & Buy
+            </button>
           </div>
         </div>
       )}
