@@ -13,8 +13,8 @@ export const Minimap: React.FC<MinimapProps> = ({ units, viewportDataRef, onNavi
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
   
-  // --- НОВОЕ: Стейт для сворачивания мини-карты ---
-  const [isMinimized, setIsMinimized] = useState(false);
+  // === ИСПРАВЛЕНО: Теперь по умолчанию TRUE (свернуто) ===
+  const [isMinimized, setIsMinimized] = useState(true);
 
   // 1. Кэшируем статичную сетку 100x100
   useEffect(() => {
@@ -40,10 +40,9 @@ export const Minimap: React.FC<MinimapProps> = ({ units, viewportDataRef, onNavi
     });
   }, [units]);
 
-  // 2. Рендерим 60 FPS (с умной паузой при сворачивании)
+  // 2. Рендерим 60 FPS (с паузой при сворачивании)
   useEffect(() => {
-    // Если радар свернут — ставим цикл на паузу (экономит батарею!)
-    if (isMinimized) return;
+    if (isMinimized) return; // Экономим ресурсы, если закрыто
 
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -73,9 +72,8 @@ export const Minimap: React.FC<MinimapProps> = ({ units, viewportDataRef, onNavi
     };
 
     render();
-
     return () => cancelAnimationFrame(animationFrameId);
-  }, [viewportDataRef, isMinimized]); // Добавили isMinimized в зависимости
+  }, [viewportDataRef, isMinimized]);
 
   const handleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = canvasRef.current?.getBoundingClientRect();
@@ -95,26 +93,26 @@ export const Minimap: React.FC<MinimapProps> = ({ units, viewportDataRef, onNavi
 
   return (
     <div 
-      className={`absolute bottom-8 z-30 bg-[#141414]/90 backdrop-blur-md p-3 border border-[#262626] rounded-2xl shadow-2xl pointer-events-auto transition-all duration-500 ease-in-out ${
+      className={`fixed bottom-8 z-30 bg-[#141414]/90 backdrop-blur-md p-3 border border-[#262626] rounded-2xl shadow-2xl pointer-events-auto transition-all duration-500 ease-in-out ${
         isSidebarOpen ? 'right-8 sm:right-[432px]' : 'right-8'
       }`}
     >
-      {/* Кликовое поле для сворачивания/разворачивания */}
+      {/* Шапка радара */}
       <div 
         className="flex justify-between items-center gap-6 cursor-pointer group"
         onClick={() => setIsMinimized(!isMinimized)}
       >
-        <div className="text-[8px] uppercase tracking-widest text-gray-500 font-bold flex items-center gap-2 group-hover:text-white transition-colors">
+        <div className="text-[8px] uppercase tracking-widest text-gray-400 font-bold flex items-center gap-2 group-hover:text-white transition-colors">
+          <div className={`w-1.5 h-1.5 rounded-full ${isMinimized ? 'bg-gray-600' : 'bg-[#FF5733] animate-pulse'}`} />
           <span>Live Radar</span>
-          {!isMinimized && <span className="text-[#FF5733] bg-[#FF5733]/10 px-2 py-0.5 rounded-full animate-pulse">Live</span>}
         </div>
-        <button className="text-gray-500 group-hover:text-white transition-colors">
+        <div className="text-gray-500 group-hover:text-white transition-colors">
           {isMinimized ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-        </button>
+        </div>
       </div>
       
-      {/* Скрываемая часть (Канвас + Легенда) */}
-      <div className={`transition-all duration-300 origin-bottom ${isMinimized ? 'hidden' : 'block mt-3'}`}>
+      {/* Контент (Canvas) */}
+      <div className={`transition-all duration-300 overflow-hidden ${isMinimized ? 'max-h-0 opacity-0' : 'max-h-64 opacity-100 mt-3'}`}>
         <canvas 
           ref={canvasRef}
           width={100} 
@@ -123,10 +121,10 @@ export const Minimap: React.FC<MinimapProps> = ({ units, viewportDataRef, onNavi
           className="w-32 h-32 sm:w-40 sm:h-40 cursor-crosshair border border-[#262626] rounded-lg image-pixelated hover:border-[#FF5733] transition-colors"
         />
         
-        <div className="flex justify-between mt-3 text-[8px] uppercase tracking-widest font-bold">
-          <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-[#FF5733]"></div> Owned</div>
-          <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-[#10B981]"></div> Sale</div>
-          <div className="flex items-center gap-1.5"><div className="w-2 h-2 border border-white"></div> View</div>
+        <div className="flex justify-between mt-3 text-[7px] uppercase tracking-widest font-bold text-gray-500">
+          <div className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-[#FF5733]"></div> Owned</div>
+          <div className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-[#10B981]"></div> Sale</div>
+          <div className="flex items-center gap-1"><div className="w-1.5 h-1.5 border border-white/50"></div> View</div>
         </div>
       </div>
     </div>

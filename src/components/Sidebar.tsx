@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ShoppingCart, ExternalLink, X, Upload, Image as ImageIcon, LogIn, Lock, Trash2, Shield } from 'lucide-react';
+import { ShoppingCart, ExternalLink, X, Upload, Image as ImageIcon, LogIn, Lock, Trash2, Shield, ChevronLeft } from 'lucide-react';
 import { Unit } from '../hooks/useGrid';
 
 interface SidebarProps {
@@ -28,6 +28,8 @@ interface SidebarProps {
   settings: any | null;
   handleModerateUnit?: (ids: number[]) => Promise<void>;
   handleResetUnits?: (ids: number[]) => Promise<void>;
+  isMobile: boolean;
+  onCloseMobile: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -55,13 +57,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
   settings,
   handleModerateUnit,
   handleResetUnits,
+  isMobile,
+  onCloseMobile,
 }) => {
 
   const [history, setHistory] = useState<any[]>([]);
 
   useEffect(() => {
+    // Исправлено: берем первый ID из массива для загрузки истории
     if (selectedUnitIds.length === 1) {
-      fetch(`/api/unit/${selectedUnitIds[0]}/history`)
+      fetch(`/api/unit/${selectedUnitIds}/history`)
         .then(res => res.json())
         .then(data => setHistory(data))
         .catch(() => setHistory([]));
@@ -74,36 +79,49 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <AnimatePresence>
       {selectedUnitIds.length > 0 && (
         <motion.div
-          initial={window.innerWidth < 640 ? { y: '100%', x: 0 } : { x: '100%', y: 0 }}
-          animate={{ x: 0, y: 0 }}
-          exit={window.innerWidth < 640 ? { y: '100%', x: 0 } : { x: '100%', y: 0 }}
+          // Сайдбар теперь ВСЕГДА выезжает справа
+          initial={{ x: '100%' }}
+          animate={{ x: 0 }}
+          exit={{ x: '100%' }}
           transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-          className="absolute z-40 bg-[#0A0A0A] flex flex-col p-6 bottom-0 left-0 w-full h-[85vh] border-t border-[#262626] rounded-t-[32px] sm:top-0 sm:right-0 sm:left-auto sm:w-[400px] sm:h-full sm:border-t-0 sm:border-l sm:rounded-t-none"
+          // z- гарантирует, что сайдбар будет ПОВЕРХ кнопок хедера
+          className="fixed top-0 right-0 h-full z- bg-[#0A0A0A] flex flex-col p-6 w-[85%] sm:w-[400px] border-l border-[#262626] shadow-2xl overflow-hidden"
         >
-          {/* Кнопка закрытия */}
-          <button 
-            onClick={() => setSelectedUnitIds([])}
-            className="absolute top-6 right-6 p-2 hover:bg-[#141414] transition-colors"
-          >
-            <X size={20} />
-          </button>
+          {/* КНОПКА ЗАКРЫТИЯ / НАЗАД */}
+          {isMobile ? (
+            <button 
+              onClick={onCloseMobile}
+              className="flex items-center gap-2 text-gray-500 hover:text-[#FF5733] transition-colors mb-4 group"
+            >
+              <ChevronLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
+              <span className="text-[10px] uppercase tracking-[0.2em] font-bold">Back to Grid</span>
+            </button>
+          ) : (
+            <button 
+              onClick={() => setSelectedUnitIds([])}
+              // Опустили крестик ниже (top-28), чтобы кнопки хедера его не перекрывали
+              className="absolute top-28 right-6 p-2 hover:bg-[#141414] transition-colors text-gray-500 hover:text-white"
+            >
+              <X size={20} />
+            </button>
+          )}
 
-          {/* Заголовок секции */}
-          <div className="mt-12">
+          {/* Заголовок: опустили ниже на десктопе, чтобы не конфликтовать с кнопками профиля */}
+          <div className={`${isMobile ? 'mt-2' : 'mt-24'}`}>
             <span className="text-[11px] uppercase tracking-[0.3em] text-[#FF5733] font-bold">Selection Details</span>
-            <h2 className="text-5xl font-bold tracking-tighter mt-2">
-              {selectedUnitIds.length === 1 ? `#${selectedUnitIds[0]}` : `${selectedUnitIds.length} Units`}
+            <h2 className="text-4xl sm:text-5xl font-bold tracking-tighter mt-2 text-white">
+              {selectedUnitIds.length === 1 ? `#${selectedUnitIds}` : `${selectedUnitIds.length} Units`}
             </h2>
             
-            {selectedUnitIds.length === 1 && selectedUnits[0]?.metadata?.link && (
+            {selectedUnitIds.length === 1 && selectedUnits?.metadata?.link && (
               <button 
-                onClick={() => window.open(selectedUnits[0].metadata.link, '_blank')}
+                onClick={() => window.open(selectedUnits.metadata.link, '_blank')}
                 className="mt-4 w-full bg-[#141414] border border-[#262626] py-3 px-4 flex items-center justify-between group hover:border-[#FF5733] transition-colors"
               >
                 <div className="flex flex-col items-start">
                   <span className="text-[9px] uppercase tracking-widest text-gray-500 font-bold">External Link</span>
                   <span className="text-xs font-bold text-[#FF5733] truncate max-w-[200px]">
-                    {selectedUnits[0].metadata.link.replace(/^https?:\/\//, '')}
+                    {selectedUnits.metadata.link.replace(/^https?:\/\//, '')}
                   </span>
                 </div>
                 <ExternalLink size={14} className="text-gray-500 group-hover:text-[#FF5733] transition-colors" />
@@ -111,13 +129,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
             )}
           </div>
 
-          {/* Основной контент */}
-          <div className="mt-8 space-y-4 flex-1 overflow-y-auto pr-2 custom-scrollbar">
+          {/* Основной контент (Прокручиваемый) */}
+          <div className="mt-8 space-y-6 flex-1 overflow-y-auto pr-2 custom-scrollbar">
             <section>
-              <h3 className="text-[10px] uppercase tracking-widest text-gray-500 font-bold mb-2">
+              <h3 className="text-[10px] uppercase tracking-widest text-gray-500 font-bold mb-3">
                 {isOwner ? 'Update Image & Link' : 'Upload Image & Link'}
               </h3>
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-4">
                 <div className="flex items-center gap-4">
                   <label className="w-20 h-20 bg-[#141414] border border-[#262626] flex flex-col items-center justify-center overflow-hidden relative group cursor-pointer hover:border-[#FF5733] transition-colors shrink-0">
                     {pendingImage ? (
@@ -127,8 +145,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           <Upload size={16} className="text-white" />
                         </div>
                       </>
-                    ) : selectedUnitIds.length === 1 && selectedUnits[0]?.metadata?.image_url ? (
-                      <img src={selectedUnits[0].metadata.image_url} alt="Unit" className="w-full h-full object-contain" />
+                    ) : selectedUnitIds.length === 1 && selectedUnits?.metadata?.image_url ? (
+                      <img src={selectedUnits.metadata.image_url} alt="Unit" className="w-full h-full object-contain" />
                     ) : (
                       <ImageIcon size={18} className="text-gray-700 group-hover:text-[#FF5733]" />
                     )}
@@ -140,50 +158,49 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   </div>
                 </div>
                 
-                <div className="space-y-1 mt-2">
+                <div className="space-y-1">
                   <label className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">Destination Link</label>
                   <input 
                     type="url" 
                     placeholder="https://example.com"
                     value={pendingLink}
                     onChange={(e) => setPendingLink(e.target.value)}
-                    className="w-full bg-[#141414] border border-[#262626] px-3 py-1.5 text-xs focus:outline-none focus:border-[#FF5733]"
+                    className="w-full bg-[#141414] border border-[#262626] px-3 py-2 text-xs focus:outline-none focus:border-[#FF5733] text-white"
                   />
                 </div>
               </div>
             </section>
 
-            <section>
-              <h3 className="text-[10px] uppercase tracking-widest text-gray-500 font-bold mb-2">Market Data</h3>
-              <div className="bg-[#141414] p-3 border border-[#262626] flex justify-between items-center mb-2">
+            <section className="bg-[#141414]/50 p-4 border border-[#262626]">
+              <h3 className="text-[10px] uppercase tracking-widest text-gray-500 font-bold mb-3">Market Data</h3>
+              <div className="flex justify-between items-end">
                 <div>
-                  <div className="text-[10px] uppercase tracking-widest text-[#FF5733] font-bold">Total Price</div>
-                  <div className="text-xl font-bold mt-0.5">{totalPrice.toFixed(2)} UNIT</div>
+                  <div className="text-[9px] uppercase tracking-widest text-gray-500 font-bold">Total Price</div>
+                  <div className="text-2xl font-bold text-white mt-1">{totalPrice.toFixed(2)} UNIT</div>
                 </div>
               </div>
 
               {(isOwner || (!isOwner && canBuy && user)) && (
-                <>
-                  <div className="space-y-1 mt-4">
+                <div className="mt-6 pt-4 border-t border-white/5 space-y-4">
+                  <div className="space-y-1">
                     <label className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">Set Resale Price</label>
                     <input 
                       type="number" step="0.1"
                       min={((totalPrice / selectedUnitIds.length) * 1.2).toFixed(2)}
-                      max={(totalPrice / selectedUnitIds.length * 2).toFixed(2)}
                       value={resalePrice}
                       onChange={(e) => setResalePrice(Number(e.target.value))}
-                      className="w-full bg-[#141414] border border-[#262626] px-3 py-1.5 text-xs focus:outline-none focus:border-[#FF5733]"
+                      className="w-full bg-[#0A0A0A] border border-[#262626] px-3 py-2 text-xs focus:outline-none focus:border-[#FF5733] text-white"
                     />
                   </div>
 
-                  <div className="space-y-2 mt-4 pt-4 border-t border-[#262626]">
+                  <div className="space-y-2">
                     <label className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">Market Status</label>
                     <button
                       onClick={() => setIsForSale(!isForSale)}
-                      className={`w-full py-3 px-4 border text-xs font-bold uppercase tracking-widest transition-colors flex justify-between items-center ${
+                      className={`w-full py-3 px-4 border text-[10px] font-bold uppercase tracking-widest transition-colors flex justify-between items-center ${
                         isForSale
                           ? 'bg-[#FF5733]/10 border-[#FF5733] text-[#FF5733]'
-                          : 'bg-[#141414] border-[#262626] text-gray-500 hover:border-gray-600'
+                          : 'bg-[#0A0A0A] border-[#262626] text-gray-500 hover:border-gray-600'
                       }`}
                     >
                       <span>{isForSale ? 'Open for Offers' : 'Locked (Private)'}</span>
@@ -191,24 +208,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         <div className={`absolute top-0 bottom-0 w-3.5 bg-white transition-all ${isForSale ? 'right-0' : 'left-0'}`} />
                       </div>
                     </button>
-                    <p className="text-[8px] text-gray-600 uppercase tracking-widest mt-1 font-medium">
-                      {isForSale ? "Other users can buy these pixels." : "These pixels are locked and cannot be purchased."}
-                    </p>
                   </div>
-                </>
+                </div>
               )}
             </section>
 
-            {/* --- НОВОЕ: ИСТОРИЯ ВЛАДЕНИЯ (PROVENANCE) --- */}
+            {/* ИСТОРИЯ */}
             {selectedUnitIds.length === 1 && history.length > 0 && (
-              <section className="mt-6">
-                <h3 className="text-[10px] uppercase tracking-widest text-gray-500 font-bold mb-3">Ownership History</h3>
-                <div className="space-y-3 bg-[#141414] border border-[#262626] p-4 rounded-xl max-h-48 overflow-y-auto custom-scrollbar">
+              <section>
+                <h3 className="text-[10px] uppercase tracking-widest text-gray-500 font-bold mb-3">Provenance</h3>
+                <div className="space-y-2">
                   {history.map((entry, idx) => (
-                    <div key={idx} className="flex justify-between items-center text-[10px] border-b border-white/5 pb-2 last:border-0 last:pb-0">
+                    <div key={idx} className="flex justify-between items-center text-[9px] bg-[#141414] border border-[#262626] p-2">
                       <div className="flex flex-col">
-                        <span className="text-white font-bold uppercase tracking-tight">Bought by {entry.buyer_name}</span>
-                        <span className="text-gray-500 text-[8px]">{new Date(entry.timestamp).toLocaleDateString()} {new Date(entry.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                        <span className="text-white font-bold uppercase tracking-tight">@{entry.buyer_name}</span>
+                        <span className="text-gray-600">{new Date(entry.timestamp).toLocaleDateString()}</span>
                       </div>
                       <div className="text-[#FF5733] font-bold">{entry.price.toFixed(2)} UNIT</div>
                     </div>
@@ -217,67 +231,74 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </section>
             )}
 
-            {/* --- ПАНЕЛЬ АДМИНА (GOD MODE) --- */}
+            {/* ADMIN MODE */}
             {user?.is_admin && selectedUnits.some(u => u.owner_id) && (
-              <section className="mt-8 pt-6 border-t border-red-500/20">
+              <section className="mt-4 p-4 border border-red-500/20 bg-red-500/5">
                 <h3 className="text-[10px] uppercase tracking-widest text-red-500 font-bold mb-3 flex items-center gap-2">
-                  <Shield size={12} /> Admin Override
+                  <Shield size={12} /> God Mode
                 </h3>
                 <div className="space-y-2">
                   <button
                     onClick={() => handleModerateUnit && handleModerateUnit(selectedUnitIds)}
-                    className="w-full bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-500 py-3 px-4 text-[10px] uppercase font-bold tracking-widest transition-colors flex items-center justify-between"
+                    className="w-full bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-500 py-2 text-[9px] uppercase font-bold tracking-widest transition-colors flex items-center justify-center gap-2"
                   >
-                    <span>Clear Image & Link</span>
-                    <Trash2 size={14} />
+                    Clear Content <Trash2 size={12} />
                   </button>
                   <button
                     onClick={() => handleResetUnits && handleResetUnits(selectedUnitIds)}
-                    className="w-full bg-red-600 hover:bg-red-700 text-white py-3 px-4 text-[10px] uppercase font-bold tracking-widest transition-colors flex items-center justify-between shadow-[0_0_15px_rgba(220,38,38,0.3)]"
+                    className="w-full bg-red-600 hover:bg-red-700 text-white py-2 text-[9px] uppercase font-bold tracking-widest transition-colors flex items-center justify-center gap-2"
                   >
-                    <span>Confiscate (Reset Unit)</span>
-                    <Lock size={14} />
+                    Confiscate <Lock size={12} />
                   </button>
-                  <p className="text-[8px] text-gray-500 uppercase tracking-widest mt-2 leading-relaxed">
-                    Clear removes content but keeps the owner. Confiscate removes the owner and sets price to default.
-                  </p>
                 </div>
               </section>
             )}
           </div>
 
-          {/* Кнопки действий */}
-          <div className="mt-auto pt-8">
+          {/* КНОПКИ ДЕЙСТВИЙ */}
+          <div className={`pt-6 ${isMobile ? 'pb-8' : 'pb-4'}`}>
             {!user ? (
               <button
                 onClick={onLoginClick}
-                className="w-full bg-[#FF5733] text-white py-6 font-bold uppercase tracking-[0.2em] text-sm hover:bg-[#E64A19] transition-colors flex items-center justify-center gap-3"
+                className="w-full bg-[#FF5733] text-white py-5 font-bold uppercase tracking-[0.2em] text-xs hover:bg-[#E64A19] transition-colors flex items-center justify-center gap-3 shadow-lg"
               >
-                <LogIn size={18} /> Login to Purchase
+                <LogIn size={16} /> Login to Purchase
               </button>
             ) : isOwner ? (
               <button
                 onClick={handleUpdatePrice}
                 disabled={isUpdatingPrice}
-                className="w-full bg-white text-black py-6 font-bold uppercase tracking-[0.2em] text-sm hover:bg-gray-200 transition-colors disabled:opacity-50 flex items-center justify-center gap-3"
+                className="w-full bg-white text-black py-5 font-bold uppercase tracking-[0.2em] text-xs hover:bg-gray-200 transition-colors disabled:opacity-50 flex items-center justify-center gap-3 shadow-lg"
               >
-                {isUpdatingPrice ? <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" /> : 'Update Status & Details'}
+                {isUpdatingPrice ? <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" /> : 'Update Pixels'}
               </button>
             ) : !canBuy ? (
               <button
                 disabled
-                className="w-full bg-[#141414] border border-[#262626] text-gray-500 py-6 font-bold uppercase tracking-[0.2em] text-sm flex items-center justify-center gap-3 cursor-not-allowed"
+                className="w-full bg-[#141414] border border-[#262626] text-gray-500 py-5 font-bold uppercase tracking-[0.2em] text-xs flex items-center justify-center gap-3 cursor-not-allowed"
               >
-                <Lock size={18} /> Not For Sale
+                <Lock size={16} /> Not For Sale
               </button>
             ) : (
               <button
                 onClick={handleBuy}
                 disabled={isBuying || !pendingImage}
-                className="w-full bg-[#FF5733] text-white py-6 font-bold uppercase tracking-[0.2em] text-sm hover:bg-[#E64A19] transition-colors disabled:opacity-50 flex items-center justify-center gap-3"
+                className="w-full bg-[#FF5733] text-white py-5 font-bold uppercase tracking-[0.2em] text-xs hover:bg-[#E64A19] transition-colors disabled:opacity-50 flex items-center justify-center gap-3 shadow-lg"
               >
-                {isBuying ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <><ShoppingCart size={18} /> {settings?.ui_buy_button || 'Buy Units'}</>}
+                {isBuying ? (
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <ShoppingCart size={16} /> 
+                    {settings?.ui_buy_button || 'Buy Units'}
+                  </>
+                )}
               </button>
+            )}
+            {!isOwner && canBuy && !pendingImage && user && (
+               <p className="text-[8px] text-gray-500 text-center uppercase mt-3 tracking-widest animate-pulse">
+                  Upload an image to unlock checkout
+               </p>
             )}
           </div>
         </motion.div>

@@ -228,29 +228,29 @@ export default function App() {
     });
   };
 
-  // --- ВОЗВРАЩАЕМ ЛОГИКУ ВЫЗОВА МЕНЮ ---
-  const handleUnitClick = (unit: Unit, shiftKey: boolean, position?: { x: number, y: number }) => {
-    const isMultiSelect = shiftKey || isSelectionMode;
-    
-    if (isMultiSelect) {
+const handleUnitClick = (unit: Unit, shiftKey: boolean, position?: { x: number, y: number }) => {
+    // 1. Логика для ПК (зажат SHIFT): Выделяем ПРЯМОУГОЛЬНИКОМ
+    if (shiftKey && selectedUnitIds.length > 0) {
       setActiveMenu(null);
-      if (selectedUnitIds.length > 0) {
-        const anchor = units.find(u => u.id === selectedUnitIds[0]);
-        if (anchor) {
-          const minX = Math.min(anchor.x, unit.x);
-          const maxX = Math.max(anchor.x, unit.x);
-          const minY = Math.min(anchor.y, unit.y);
-          const maxY = Math.max(anchor.y, unit.y);
-          
-          const newSelection = units
-            .filter(u => u.x >= minX && u.x <= maxX && u.y >= minY && u.y <= maxY)
-            .map(u => u.id);
-          
-          setSelectedUnitIds(newSelection);
-          return;
-        }
+      const anchor = units.find(u => u.id === selectedUnitIds);
+      if (anchor) {
+        const minX = Math.min(anchor.x, unit.x);
+        const maxX = Math.max(anchor.x, unit.x);
+        const minY = Math.min(anchor.y, unit.y);
+        const maxY = Math.max(anchor.y, unit.y);
+        
+        const newSelection = units
+          .filter(u => u.x >= minX && u.x <= maxX && u.y >= minY && u.y <= maxY)
+          .map(u => u.id);
+        
+        setSelectedUnitIds(newSelection);
+        return;
       }
-      
+    }
+
+    // 2. Логика для Выделения (Selection Mode или клик по одному)
+    if (isSelectionMode) {
+      setActiveMenu(null);
       setSelectedUnitIds(prev => 
         prev.includes(unit.id) 
           ? prev.filter(id => id !== unit.id) 
@@ -259,6 +259,7 @@ export default function App() {
       return;
     }
 
+    // 3. Обычный клик
     if (unit.owner_id && position) {
       setActiveMenu({ unit, x: position.x, y: position.y });
       setSelectedUnitIds([unit.id]);
@@ -267,7 +268,6 @@ export default function App() {
       setSelectedUnitIds([unit.id]);
     }
   };
-  // ------------------------------------
 
   const handleUpdatePrice = async () => {
     if (selectedUnitIds.length === 0 || !isOwner) return;
@@ -513,36 +513,53 @@ const handleBuy = async () => {
         />
       </div>
 
-      {/* Selection Mode Toggle */}
-      <div className="absolute bottom-8 left-8 z-30 flex flex-col gap-2">
+{/* Selection Mode & Guides Toolbar (Умное позиционирование) */}
+      <div className={`fixed z- flex flex-col gap-2 transition-all duration-300 
+        ${isMobile 
+          ? 'top-1/2 -translate-y-1/2 right-4' // На мобилках: справа по центру
+          : 'bottom-8 left-8'                  // На ПК: как и было, снизу слева
+        }`}>
+        
+        {/* Кнопка Guides */}
         <button
           onClick={() => setShowGuides(!showGuides)}
-          className={`flex items-center gap-3 px-4 py-3 border transition-all duration-300 ${
+          className={`flex items-center justify-center transition-all duration-300 border ${
+            isMobile ? 'p-3' : 'px-4 py-3 gap-3'
+          } ${
             showGuides 
-              ? 'bg-blue-600 border-blue-600 text-white shadow-[0_0_20px_rgba(37,99,235,0.4)]' 
-              : 'bg-[#141414] border-[#262626] text-gray-400 hover:border-gray-600'
+              ? 'bg-blue-600 border-blue-600 text-white shadow-lg' 
+              : 'bg-[#141414]/80 backdrop-blur-md border-[#262626] text-gray-400'
           }`}
         >
-          <div className={`w-2 h-2 rounded-full ${showGuides ? 'bg-white animate-pulse' : 'bg-gray-600'}`} />
-          <span className="text-[10px] uppercase tracking-[0.2em] font-bold">
-            Guides: {showGuides ? 'ON' : 'OFF'}
-          </span>
+          <div className={`w-2 h-2 rounded-full ${showGuides ? 'bg-white animate-pulse' : 'bg-gray-600'} ${!isMobile && 'mr-1'}`} />
+          {!isMobile && (
+            <span className="text-[10px] uppercase tracking-[0.2em] font-bold">
+              Guides: {showGuides ? 'ON' : 'OFF'}
+            </span>
+          )}
         </button>
+
+        {/* Кнопка Selection Mode */}
         <button
           onClick={() => setIsSelectionMode(!isSelectionMode)}
-          className={`flex items-center gap-3 px-4 py-3 border transition-all duration-300 ${
+          className={`flex items-center justify-center transition-all duration-300 border ${
+            isMobile ? 'p-3' : 'px-4 py-3 gap-3'
+          } ${
             isSelectionMode 
-              ? 'bg-[#FF5733] border-[#FF5733] text-white shadow-[0_0_20px_rgba(255,87,51,0.4)]' 
-              : 'bg-[#141414] border-[#262626] text-gray-400 hover:border-gray-600'
+              ? 'bg-[#FF5733] border-[#FF5733] text-white shadow-lg' 
+              : 'bg-[#141414]/80 backdrop-blur-md border-[#262626] text-gray-400'
           }`}
         >
           {isSelectionMode ? <BoxSelect size={18} /> : <MousePointer2 size={18} />}
-          <span className="text-[10px] uppercase tracking-[0.2em] font-bold">
-            {isSelectionMode ? 'Selection Mode: ON' : 'Selection Mode: OFF'}
-          </span>
+          {!isMobile && (
+            <span className="text-[10px] uppercase tracking-[0.2em] font-bold">
+              Selection: {isSelectionMode ? 'ON' : 'OFF'}
+            </span>
+          )}
         </button>
-        {isSelectionMode && (
-          <p className="text-[8px] uppercase tracking-widest text-[#FF5733] font-bold animate-pulse">
+
+        {isSelectionMode && !isMobile && (
+          <p className="text-[8px] uppercase tracking-widest text-[#FF5733] font-bold animate-pulse text-center">
             Drag to select area
           </p>
         )}
@@ -573,12 +590,15 @@ const handleBuy = async () => {
         )}
       </AnimatePresence>
 
-      <Minimap 
-        units={units} 
-        viewportDataRef={viewportDataRef} 
-        onNavigate={(id) => setFocusUnitId(id)} 
-        isSidebarOpen={selectedUnitIds.length > 0} 
-      />
+{/* 1. РАДАР: Полностью скрыт на мобилках, виден только на ПК */}
+      {!isMobile && (
+        <Minimap 
+          units={units} 
+          viewportDataRef={viewportDataRef} 
+          onNavigate={(id) => setFocusUnitId(id)} 
+          isSidebarOpen={selectedUnitIds.length > 0} 
+        />
+      )}
 
       {/* --- РЕНДЕР НОВОГО FLOATING MENU --- */}
       <FloatingMenu 
