@@ -324,14 +324,17 @@ async function startServer() {
     
     const { username, password, firstName } = result.data;
     const id = crypto.randomUUID();
-    
+
+    // Определяем, пустая ли таблица users. Первый пользователь получает is_admin = 1.
     const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number };
     const isAdmin = userCount.count === 0 ? 1 : 0;
-    
+
     try {
       const hashedPassword = bcrypt.hashSync(password, 10);
+
       db.prepare('INSERT INTO users (id, username, password, first_name, is_admin) VALUES (?, ?, ?, ?, ?)')
         .run(id, username, hashedPassword, firstName || username, isAdmin);
+
       res.json({ id, username, first_name: firstName || username, is_admin: isAdmin === 1 });
     } catch (error: any) {
       if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
