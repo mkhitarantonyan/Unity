@@ -32,7 +32,7 @@ export default function App() {
   
   useEffect(() => {
     initApp();
-    fetch('/api/admin/settings')
+    fetch('/api/settings')
       .then(res => res.json())
       .then(setSettings);
   }, []);
@@ -151,9 +151,10 @@ export default function App() {
       const avgPrice = selectedUnits.reduce((sum, u) => sum + u.sale_price, 0) / selectedUnitIds.length;
       setResalePrice(Number((avgPrice * 1.2).toFixed(2)));
       
-      if (user && selectedUnitIds.length === 1 && selectedUnits.length === 1 && selectedUnits?.owner_id === user.id) {
-        setPendingLink(selectedUnits.metadata.link || '');
-        setIsForSale(!!selectedUnits.metadata.is_for_sale);
+      if (user && selectedUnitIds.length === 1 && selectedUnits.length === 1 && selectedUnits[0]?.owner_id === user.id) {
+        const selectedUnit = selectedUnits[0];
+        setPendingLink(selectedUnit?.metadata?.link || '');
+        setIsForSale(!!selectedUnit?.metadata?.is_for_sale);
       } else {
         setIsForSale(false);
       }
@@ -193,7 +194,8 @@ const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
   const handleUnitClick = (unit: Unit, shiftKey: boolean, position?: { x: number, y: number }) => {
     if (shiftKey && selectedUnitIds.length > 0) {
       setActiveMenu(null);
-      const anchor = units.find(u => u.id === selectedUnitIds);
+      const anchorId = selectedUnitIds[selectedUnitIds.length - 1];
+      const anchor = units.find(u => u.id === anchorId);
       if (anchor) {
         const minX = Math.min(anchor.x, unit.x);
         const maxX = Math.max(anchor.x, unit.x);
@@ -249,7 +251,7 @@ const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
           metadata: pendingImage || pendingLink ? {
             title: `Owned by ${user.first_name}`,
             link: pendingLink,
-            image_url: pendingImage || selectedUnits.metadata.image_url,
+            image_url: pendingImage || selectedUnits[0]?.metadata?.image_url || '',
             is_for_sale: isForSale,
             group: selectedUnitIds.length > 1 ? { minX, minY, maxX, maxY } : undefined
           } : undefined
@@ -484,6 +486,8 @@ const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
           }}
           handleModerateUnit={handleModerateUnit}
           handleResetUnits={handleResetUnits}
+          isMobile={isMobile}
+          onCloseMobile={() => setIsMobileSidebarOpen(false)}
         />
       )}
       {/* Profile Modal */}

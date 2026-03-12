@@ -178,7 +178,9 @@ export const UnityCanvas: React.FC<UnityCanvasProps> = ({
             }
           } else if (activePointers.size === 2) {
             const pts = Array.from(activePointers.values());
-            lastPinchDist = getDist(pts, pts);
+            if (pts.length === 2) {
+              lastPinchDist = getDist(pts[0], pts[1]);
+            }
             dragStartWorldPosRef.current = null;
             if (marqueeGraphicsRef.current) marqueeGraphicsRef.current.clear();
           }
@@ -191,24 +193,25 @@ export const UnityCanvas: React.FC<UnityCanvasProps> = ({
 
           if (activePointers.size === 2) {
             const pts = Array.from(activePointers.values());
-            const dist = getDist(pts, pts);
-            if (lastPinchDist > 0) {
-              const zoomFactor = dist / lastPinchDist;
-              lastPinchDist = dist;
-              const midX = (pts.x + pts.x) / 2;
-              const midY = (pts.y + pts.y) / 2;
-              const globalMid = getGlobalPos(midX, midY);
-              if (isNaN(globalMid.x) || isNaN(globalMid.y)) return;
-              const worldMid = viewport.toLocal(globalMid);
-              
-              // ПРИМЕНИЛИ ОГРАНИЧЕНИЯ ДЛЯ ПАЛЬЦЕВ
-              const newScale = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, viewport.scale.x * zoomFactor));
-              viewport.scale.set(newScale);
-              
-              const newGlobalMid = viewport.toGlobal(worldMid);
-              viewport.x += globalMid.x - newGlobalMid.x;
-              viewport.y += globalMid.y - newGlobalMid.y;
-              lastPos = { x: midX, y: midY };
+            if (pts.length === 2) {
+              const dist = getDist(pts[0], pts[1]);
+              if (lastPinchDist > 0) {
+                const zoomFactor = dist / lastPinchDist;
+                lastPinchDist = dist;
+                const midX = (pts[0].x + pts[1].x) / 2;
+                const midY = (pts[0].y + pts[1].y) / 2;
+                const globalMid = getGlobalPos(midX, midY);
+                if (isNaN(globalMid.x) || isNaN(globalMid.y)) return;
+                const worldMid = viewport.toLocal(globalMid);
+
+                const newScale = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, viewport.scale.x * zoomFactor));
+                viewport.scale.set(newScale);
+
+                const newGlobalMid = viewport.toGlobal(worldMid);
+                viewport.x += globalMid.x - newGlobalMid.x;
+                viewport.y += globalMid.y - newGlobalMid.y;
+                lastPos = { x: midX, y: midY };
+              }
             }
           } else if (activePointers.size === 1 && isMouseDownRef.current) {
             if (e.shiftKey || isSelectionModeRef.current) {
@@ -431,10 +434,9 @@ export const UnityCanvas: React.FC<UnityCanvasProps> = ({
       if (Math.abs(dx) < 1 && Math.abs(dy) < 1) app.ticker.remove(pan);
     };
     app.ticker.add(pan);
-    return () => app.ticker.remove(pan);
+    return () => { app.ticker.remove(pan); };
   }, [focusUnitId]);
 
-  // ПОЛНОСТЬЮ ИСПРАВЛЕННАЯ ФУНКЦИЯ ПЛАВНОГО ЗУМА
   const handleZoom = (direction: 'in' | 'out') => {
     const app = appRef.current;
     const viewport = viewportRef.current;
@@ -442,35 +444,28 @@ export const UnityCanvas: React.FC<UnityCanvasProps> = ({
 
     const zoomStep = 1.5;
     
-    // Рассчитываем целевой масштаб с жесткими лимитами
     const targetScale = direction === 'in' 
       ? Math.min(MAX_ZOOM, viewport.scale.x * zoomStep)
       : Math.max(MIN_ZOOM, viewport.scale.x / zoomStep);
 
-    // Если уперлись в лимит - выходим
     if (targetScale === viewport.scale.x) return;
 
     const screenCenterX = app.screen.width / 2;
     const screenCenterY = app.screen.height / 2;
     const screenCenter = { x: screenCenterX, y: screenCenterY };
     
-    // Определяем, на какую точку мира мы сейчас смотрим по центру экрана
     const worldCenter = viewport.toLocal(screenCenter);
 
-    // Сохраняем текущие значения перед "хаком"
     const startScale = viewport.scale.x;
     const startX = viewport.x;
     const startY = viewport.y;
 
-    // Временный хак: ставим целевой масштаб, чтобы движок Pixi сам посчитал нужные координаты
     viewport.scale.set(targetScale);
     const newGlobalCenter = viewport.toGlobal(worldCenter);
     
-    // Вот идеальные X и Y, при которых центр остается в центре
     const targetX = startX + (screenCenterX - newGlobalCenter.x);
     const targetY = startY + (screenCenterY - newGlobalCenter.y);
 
-    // Возвращаем все назад, чтобы начать анимацию
     viewport.scale.set(startScale);
 
     if (zoomTickerRef.current) {
@@ -509,7 +504,6 @@ export const UnityCanvas: React.FC<UnityCanvasProps> = ({
         style={{ touchAction: 'none' }} 
       />
 
-      {/* КНОПКИ ЗУМА */}
       <div className="absolute right-4 bottom-28 flex flex-col gap-3 z- sm:hidden pointer-events-auto">
         <button 
           onClick={(e) => { e.stopPropagation(); handleZoom('in'); }}

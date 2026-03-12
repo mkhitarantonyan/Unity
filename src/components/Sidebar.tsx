@@ -113,15 +113,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {selectedUnitIds.length === 1 ? `#${selectedUnitIds}` : `${selectedUnitIds.length} Units`}
             </h2>
             
-            {selectedUnitIds.length === 1 && selectedUnits?.metadata?.link && (
+            {selectedUnitIds.length === 1 && selectedUnits[0]?.metadata?.link && (
               <button 
-                onClick={() => window.open(selectedUnits.metadata.link, '_blank')}
+                onClick={() => window.open(selectedUnits[0].metadata.link, '_blank')}
                 className="mt-4 w-full bg-[#141414] border border-[#262626] py-3 px-4 flex items-center justify-between group hover:border-[#FF5733] transition-colors"
               >
                 <div className="flex flex-col items-start">
                   <span className="text-[9px] uppercase tracking-widest text-gray-500 font-bold">External Link</span>
                   <span className="text-xs font-bold text-[#FF5733] truncate max-w-[200px]">
-                    {selectedUnits.metadata.link.replace(/^https?:\/\//, '')}
+                    {selectedUnits[0].metadata.link.replace(/^https?:\/\//, '')}
                   </span>
                 </div>
                 <ExternalLink size={14} className="text-gray-500 group-hover:text-[#FF5733] transition-colors" />
@@ -145,8 +145,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           <Upload size={16} className="text-white" />
                         </div>
                       </>
-                    ) : selectedUnitIds.length === 1 && selectedUnits?.metadata?.image_url ? (
-                      <img src={selectedUnits.metadata.image_url} alt="Unit" className="w-full h-full object-contain" />
+                    ) : selectedUnitIds.length === 1 && selectedUnits[0]?.metadata?.image_url ? (
+                      <img src={selectedUnits[0].metadata.image_url} alt="Unit" className="w-full h-full object-contain" />
                     ) : (
                       <ImageIcon size={18} className="text-gray-700 group-hover:text-[#FF5733]" />
                     )}

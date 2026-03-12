@@ -66,8 +66,7 @@ export function useGrid() {
       setUnits(prevUnits => {
         const nextUnits = [...prevUnits];
         updatedUnits.forEach(u => {
-          if (u) { // Защита от пустых данных
-            // Мгновенно обновляем конкретные ячейки на холсте
+          if (u && Number.isInteger(u.id) && u.id >= 0 && u.id < prevUnits.length) {
             nextUnits[u.id] = { ...nextUnits[u.id], ...u };
           }
         });

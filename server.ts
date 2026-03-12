@@ -151,11 +151,11 @@ if (count.count === 0) {
 }
 
 function validateTelegramData(initData: string): boolean {
-  if (initData === 'WEB_DEMO') return true;
+  if (initData === 'WEB_DEMO' && process.env.NODE_ENV !== 'production') return true;
   const botToken = process.env.BOT_TOKEN;
   if (!botToken) {
-    console.warn('BOT_TOKEN not set, skipping validation (DEVELOPMENT ONLY)');
-    return true;
+    console.error('BOT_TOKEN not set. Rejecting Telegram initData.');
+    return false;
   }
   if (!initData) return false;
   try {
@@ -235,7 +235,7 @@ const checkAdmin = (req: express.Request, res: express.Response, next: express.N
   if (!authHeader || !authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
   
   const token = authHeader.split(' ')[1];
-  const session = db.prepare('SELECT user_id FROM sessions WHERE token = ?').get(token) as { user_id: string } | undefined;
+  const session = db.prepare('SELECT user_id FROM sessions WHERE token = ? AND datetime(created_at, "+24 hours") > datetime("now")').get(token) as { user_id: string } | undefined;
   
   if (!session) return res.status(401).json({ error: 'Invalid or expired token' });
   
@@ -274,6 +274,14 @@ async function startServer() {
 
   app.use(express.json({ limit: '10mb' }));
 
+  const authLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 5,
+    message: { error: 'Too many auth requests. Please wait a minute.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+
   const uploadLimiter = rateLimit({
     windowMs: 60 * 1000, 
     max: 10, 
@@ -310,7 +318,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/register', (req, res) => {
+  app.post('/api/register', authLimiter, (req, res) => {
     const result = AuthSchema.safeParse(req.body);
     if (!result.success) return res.status(400).json({ error: result.error.message });
     
@@ -334,7 +342,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/login', (req, res) => {
+  app.post('/api/login', authLimiter, (req, res) => {
     const result = AuthSchema.omit({ firstName: true }).safeParse(req.body);
     if (!result.success) return res.status(400).json({ error: result.error.message });
     
@@ -597,7 +605,13 @@ async function startServer() {
     res.json({ success: true });
   });
 
-  app.get('/api/admin/settings', (req, res) => {
+app.get('/api/settings', (req, res) => {
+    const settings = db.prepare("SELECT * FROM settings WHERE key NOT IN ('cloudinary_api_key', 'cloudinary_api_secret')").all();
+    const settingsObj = (settings as any[]).reduce((acc, s) => ({ ...acc, [s.key]: s.value }), {});
+    res.json(settingsObj);
+});
+
+  app.get('/api/admin/settings', checkAdmin, (req, res) => {
     const settings = db.prepare('SELECT * FROM settings').all();
     const settingsObj = (settings as any[]).reduce((acc, s) => ({ ...acc, [s.key]: s.value }), {});
     res.json(settingsObj);

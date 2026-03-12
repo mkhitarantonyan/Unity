@@ -59,7 +59,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                 <button 
                   onClick={() => {
                     setSelectedUnitIds(myUnits.map(u => u.id));
-                    setFocusUnitId(myUnits?.id || null); // Исправлен фокус
+                    setFocusUnitId(myUnits[0]?.id || null); // Исправлен фокус
                     onClose();
                   }}
                   className="w-full bg-[#141414] border border-[#262626] hover:border-[#FF5733] hover:text-[#FF5733] text-white py-4 font-bold uppercase tracking-[0.2em] text-xs transition-colors flex items-center justify-center gap-2"
