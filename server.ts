@@ -620,15 +620,27 @@ app.get('/api/settings', (req, res) => {
     res.json(settingsObj);
   });
 
-  app.post('/api/admin/settings', checkAdmin, (req, res) => {
+app.post('/api/admin/settings', checkAdmin, (req, res) => {
     const settings = req.body;
-    const update = db.prepare('UPDATE settings SET value = ? WHERE key = ?');
+    
+    // МЕНЯЕМ ЛОГИКУ: вместо "просто обновить", делаем "вставить или перезаписать"
+    const update = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
+    
     const updateMany = db.transaction((data: any) => {
-      for (const [key, value] of Object.entries(data)) update.run(value, key);
+      // Обрати внимание: здесь поменялся порядок на (key, value)
+      for (const [key, value] of Object.entries(data)) {
+        update.run(key, String(value));
+      }
     });
-    updateMany(settings);
-    cloudinaryConfigured = false;
-    res.json({ success: true });
+    
+    try {
+      updateMany(settings);
+      cloudinaryConfigured = false; // Сбрасываем конфиг, чтобы Cloudinary подхватил новые ключи
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Ошибка при сохранении настроек:', error);
+      res.status(500).json({ error: 'Failed to save settings' });
+    }
   });
 
   app.post('/api/admin/moderate-unit', checkAdmin, (req, res) => {

@@ -9,8 +9,6 @@ interface FloatingMenuProps {
 }
 
 export const FloatingMenu: React.FC<FloatingMenuProps> = ({ activeMenu, onClose }) => {
-  // Если у пикселя нет ссылки, нам не нужно показывать это всплывающее меню 
-  // (весь остальной функционал есть в Sidebar)
   if (activeMenu && !activeMenu.unit.metadata?.link) {
     return null;
   }
@@ -24,8 +22,6 @@ export const FloatingMenu: React.FC<FloatingMenuProps> = ({ activeMenu, onClose 
           exit={{ opacity: 0, scale: 0.9, y: 10 }}
           style={{ 
             left: activeMenu.x, 
-            // Показываем ВЫШЕ курсора (y - 20) и сдвигаем весь блок вверх (-100%), 
-            // чтобы он вообще не перекрывал пиксель, по которому кликнули
             top: activeMenu.y - 20,
             transform: 'translate(-50%, -100%)'
           }}

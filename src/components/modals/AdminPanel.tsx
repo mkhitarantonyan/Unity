@@ -38,7 +38,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, user, s
       const [statsRes, usersRes, settingsRes] = await Promise.all([
         fetch('/api/admin/stats', { headers }),
         fetch('/api/admin/users', { headers }),
-        fetch('/api/admin/settings')
+        fetch('/api/admin/settings', { headers })
       ]);
 
       if (statsRes.ok) setAdminStats(await statsRes.json());

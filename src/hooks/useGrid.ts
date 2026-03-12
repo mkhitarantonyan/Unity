@@ -11,8 +11,6 @@ export interface Unit {
   metadata: any;
 }
 
-// Подключаемся к нашему WebSocket серверу
-// Транспорт websocket делает связь мгновенной
 const socket = io('/', { transports: ['websocket', 'polling'] });
 
 export function useGrid() {
@@ -34,12 +32,10 @@ export function useGrid() {
         metadata: {}
       }));
 
-      // 2. Скачиваем с сервера только купленные пиксели
       const response = await fetch('/api/grid');
       if (!response.ok) throw new Error('Failed to fetch grid');
       const data = await response.json();
 
-      // 3. Накладываем купленные пиксели поверх пустой сетки
       const mergedGrid = [...grid];
       data.forEach((u: Unit) => {
         mergedGrid[u.id] = { ...mergedGrid[u.id], ...u };
@@ -57,9 +53,6 @@ export function useGrid() {
   useEffect(() => {
     fetchGrid();
 
-    // ----------------------------------------------------
-    // МАГИЯ WEBSOCKET: Слушаем обновления в прямом эфире
-    // ----------------------------------------------------
     socket.on('grid_update', (updatedUnits: Unit[]) => {
       console.log('Live update received:', updatedUnits);
       

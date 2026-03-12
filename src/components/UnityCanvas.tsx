@@ -13,12 +13,7 @@ interface Unit {
     title?: string;
     image_url?: string;
     link?: string;
-    group?: {
-      minX: number;
-      minY: number;
-      maxX: number;
-      maxY: number;
-    };
+    group?: { minX: number; minY: number; maxX: number; maxY: number; };
   };
 }
 
@@ -39,14 +34,12 @@ interface UnityCanvasProps {
 const GRID_SIZE = 100;
 const UNIT_SIZE = 10;
 const CANVAS_SIZE = GRID_SIZE * UNIT_SIZE;
-// ОГРАНИЧЕНИЯ МАСШТАБА (Чтобы сетка не пропадала)
 const MIN_ZOOM = 0.3;
 const MAX_ZOOM = 10;
 
 export const UnityCanvas: React.FC<UnityCanvasProps> = ({ 
   units, selectedUnitIds, pendingImage, isSelectionMode, focusUnitId, viewportDataRef,
-  showGuides,
-  onUnitClick, onUnitHover, onUnitsSelect, onInteraction 
+  showGuides, onUnitClick, onUnitHover, onUnitsSelect, onInteraction 
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
@@ -57,21 +50,16 @@ export const UnityCanvas: React.FC<UnityCanvasProps> = ({
   const marqueeGraphicsRef = useRef<PIXI.Graphics | null>(null);
   const previewSpriteRef = useRef<PIXI.Sprite | null>(null);
   
+  const [isPixiReady, setIsPixiReady] = useState(false);
   const zoomTickerRef = useRef<((ticker: PIXI.Ticker) => void) | null>(null);
   const unitsRef = useRef(units);
-
-  useEffect(() => {
-    unitsRef.current = units;
-  }, [units]);
 
   const isMouseDownRef = useRef(false);
   const dragStartWorldPosRef = useRef<PIXI.PointData | null>(null);
   const isShiftDownRef = useRef(false);
   const isSelectionModeRef = useRef(!!isSelectionMode);
 
-  useEffect(() => {
-    isSelectionModeRef.current = !!isSelectionMode;
-  }, [isSelectionMode]);
+  useEffect(() => { isSelectionModeRef.current = !!isSelectionMode; }, [isSelectionMode]);
 
   const drawGrid = useCallback((g: PIXI.Graphics, guides: boolean) => {
     g.clear();
@@ -156,9 +144,7 @@ export const UnityCanvas: React.FC<UnityCanvasProps> = ({
         let lastPos = { x: 0, y: 0 };
         const activePointers = new Map<number, { x: number, y: number }>();
 
-        const getDist = (p1: {x:number, y:number}, p2: {x:number, y:number}) => {
-          return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
-        };
+        const getDist = (p1: {x:number, y:number}, p2: {x:number, y:number}) => Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
 
         const getGlobalPos = (clientX: number, clientY: number) => {
           const rect = app!.canvas.getBoundingClientRect();
@@ -178,9 +164,7 @@ export const UnityCanvas: React.FC<UnityCanvasProps> = ({
             }
           } else if (activePointers.size === 2) {
             const pts = Array.from(activePointers.values());
-            if (pts.length === 2) {
-              lastPinchDist = getDist(pts[0], pts[1]);
-            }
+            if (pts.length === 2) lastPinchDist = getDist(pts[0], pts[1]);
             dragStartWorldPosRef.current = null;
             if (marqueeGraphicsRef.current) marqueeGraphicsRef.current.clear();
           }
@@ -264,7 +248,6 @@ export const UnityCanvas: React.FC<UnityCanvasProps> = ({
           const factor = e.deltaY > 0 ? 0.9 : 1.1;
           const worldPos = viewport.toLocal(app!.renderer.events.pointer.global);
           
-          // ПРИМЕНИЛИ ОГРАНИЧЕНИЯ ДЛЯ КОЛЕСИКА
           viewport.scale.set(Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, viewport.scale.x * factor)));
           
           const newGlobal = viewport.toGlobal(worldPos);
@@ -287,6 +270,10 @@ export const UnityCanvas: React.FC<UnityCanvasProps> = ({
             viewportDataRef.current = { x: tl.x / UNIT_SIZE, y: tl.y / UNIT_SIZE, w: (br.x - tl.x) / UNIT_SIZE, h: (br.y - tl.y) / UNIT_SIZE };
           }
         });
+
+        // ДВИЖОК ПОЛНОСТЬЮ ГОТОВ
+        console.log('[UnityCanvas] PixiJS successfully initialized.');
+        setIsPixiReady(true);
 
         (app as any)._unityCleanup = () => {
           app?.canvas.removeEventListener('pointerdown', onPointerDown);
@@ -336,6 +323,8 @@ export const UnityCanvas: React.FC<UnityCanvasProps> = ({
   const renderUnits = useCallback((container: PIXI.Container, unitsData: Unit[]) => {
     if (!container) return;
     const currentIds = new Set(unitsData.filter(u => u.owner_id).map(u => u.id));
+    
+    // 1. Очищаем удаленные пиксели
     for (const [id, sprite] of spritesRef.current.entries()) {
       if (!currentIds.has(id)) {
         container.removeChild(sprite);
@@ -343,14 +332,31 @@ export const UnityCanvas: React.FC<UnityCanvasProps> = ({
         spritesRef.current.delete(id);
       }
     }
+    
     const owned = unitsData.filter(u => u.owner_id);
     for (let unit of owned) {
-      let sprite = spritesRef.current.get(unit.id);
+      let sprite = spritesRef.current.get(unit.id) as any;
+
+      if (sprite) {
+        const currentUrl = sprite._unityImageUrl || '';
+        const newUrl = unit.metadata?.image_url || '';
+        if (currentUrl !== newUrl) {
+          container.removeChild(sprite);
+          sprite.destroy({ children: true, texture: true });
+          spritesRef.current.delete(unit.id);
+          sprite = undefined;
+        }
+      }
+
+      // 2. Рисуем новый или обновленный пиксель
       if (!sprite) {
-        if (unit.metadata.image_url) {
-          const s = new PIXI.Sprite(PIXI.Texture.WHITE);
+        if (unit.metadata?.image_url) {
+          const s = new PIXI.Sprite(PIXI.Texture.WHITE) as any;
+          s._unityImageUrl = unit.metadata.image_url; 
           s.width = s.height = UNIT_SIZE;
-          s.x = unit.x * UNIT_SIZE; s.y = unit.y * UNIT_SIZE;
+          s.x = unit.x * UNIT_SIZE; 
+          s.y = unit.y * UNIT_SIZE;
+          
           getTexture(unit.metadata.image_url).then(tex => {
             if (tex.source) tex.source.scaleMode = 'nearest';
             if (unit.metadata.group) {
@@ -363,7 +369,8 @@ export const UnityCanvas: React.FC<UnityCanvasProps> = ({
           container.addChild(s);
           spritesRef.current.set(unit.id, s);
         } else {
-          const g = new PIXI.Graphics().rect(unit.x * UNIT_SIZE, unit.y * UNIT_SIZE, UNIT_SIZE, UNIT_SIZE).fill(0xFF5733);
+          const g = new PIXI.Graphics().rect(unit.x * UNIT_SIZE, unit.y * UNIT_SIZE, UNIT_SIZE, UNIT_SIZE).fill(0xFF5733) as any;
+          g._unityImageUrl = '';
           container.addChild(g);
           spritesRef.current.set(unit.id, g);
         }
@@ -371,9 +378,15 @@ export const UnityCanvas: React.FC<UnityCanvasProps> = ({
     }
   }, []);
 
+  // САМАЯ ВАЖНАЯ ЧАСТЬ - Отрисовка
   useEffect(() => {
-    if (unitsContainerRef.current && units.length > 0) renderUnits(unitsContainerRef.current, units);
-  }, [units, renderUnits]);
+    unitsRef.current = units;
+    console.log(`[UnityCanvas] Trying to render. Data count: ${units.length}. Pixi Ready: ${isPixiReady}`);
+    
+    if (isPixiReady && unitsContainerRef.current) {
+      renderUnits(unitsContainerRef.current, units);
+    }
+  }, [units, renderUnits, isPixiReady]);
 
   useEffect(() => {
     const viewport = viewportRef.current;

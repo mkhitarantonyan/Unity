@@ -6,3 +6,7 @@ coverage/
 *.log
 .env*
 !.env.example
+# Database
+unity.db
+unity.db-wal
+unity.db-shm

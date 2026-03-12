@@ -344,7 +344,7 @@ const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       }
 
       setSelectedUnitIds(data.unitIds);
-      setFocusUnitId(data.unitIds); 
+      setFocusUnitId(data.unitIds[0] ?? null);
       
       if (data.unitIds.length > 1) {
         toast.success(`Found ${data.unitIds.length} units`);
@@ -518,12 +518,6 @@ const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         onOpenLegal={setLegalType}
       />
       {/* Окно с документами */}
-      <LegalModal 
-        isOpen={!!legalType} 
-        type={legalType} 
-        onClose={() => setLegalType(null)} 
-      />
-      {/* Legal Modal */}
       <LegalModal 
         isOpen={!!legalType} 
         type={legalType} 
