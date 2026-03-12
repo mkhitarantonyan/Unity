@@ -235,7 +235,7 @@ const checkAdmin = (req: express.Request, res: express.Response, next: express.N
   if (!authHeader || !authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
   
   const token = authHeader.split(' ')[1];
-  const session = db.prepare('SELECT user_id FROM sessions WHERE token = ? AND datetime(created_at, "+24 hours") > datetime("now")').get(token) as { user_id: string } | undefined;
+  const session = db.prepare("SELECT user_id FROM sessions WHERE token = ? AND datetime(created_at, '+24 hours') > datetime('now')").get(token) as { user_id: string } | undefined;
   
   if (!session) return res.status(401).json({ error: 'Invalid or expired token' });
   

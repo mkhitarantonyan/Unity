@@ -64,7 +64,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [history, setHistory] = useState<any[]>([]);
 
   useEffect(() => {
-    // Исправлено: берем первый ID из массива для загрузки истории
     if (selectedUnitIds.length === 1) {
       fetch(`/api/unit/${selectedUnitIds}/history`)
         .then(res => res.json())
@@ -79,12 +78,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <AnimatePresence>
       {selectedUnitIds.length > 0 && (
         <motion.div
-          // Сайдбар теперь ВСЕГДА выезжает справа
           initial={{ x: '100%' }}
           animate={{ x: 0 }}
           exit={{ x: '100%' }}
           transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-          // z- гарантирует, что сайдбар будет ПОВЕРХ кнопок хедера
           className="fixed top-0 right-0 h-full z- bg-[#0A0A0A] flex flex-col p-6 w-[85%] sm:w-[400px] border-l border-[#262626] shadow-2xl overflow-hidden"
         >
           {/* КНОПКА ЗАКРЫТИЯ / НАЗАД */}
