@@ -517,7 +517,7 @@ export const UnityCanvas: React.FC<UnityCanvasProps> = ({
         style={{ touchAction: 'none' }} 
       />
 
-      <div className="absolute right-4 bottom-28 flex flex-col gap-3 z- sm:hidden pointer-events-auto">
+      <div className="absolute right-4 top-[51%] flex flex-col gap-3 z- sm:hidden pointer-events-auto">
         <button 
           onClick={(e) => { e.stopPropagation(); handleZoom('in'); }}
           className="flex items-center justify-center bg-[#141414]/80 backdrop-blur-md border border-[#262626] p-3 text-gray-400 hover:text-white hover:border-[#FF5733] transition-colors shadow-lg active:scale-95"
