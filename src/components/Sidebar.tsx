@@ -82,7 +82,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           animate={{ x: 0 }}
           exit={{ x: '100%' }}
           transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-          className="fixed top-0 right-0 h-full z- bg-[#0A0A0A] flex flex-col p-6 w-[85%] sm:w-[400px] border-l border-[#262626] shadow-2xl overflow-hidden"
+          className="fixed top-0 right-0 h-full z-[100] bg-[#0A0A0A] flex flex-col p-6 w-[85%] sm:w-[400px] border-l border-[#262626] shadow-2xl overflow-hidden"
         >
           {/* КНОПКА ЗАКРЫТИЯ / НАЗАД */}
           {isMobile ? (
