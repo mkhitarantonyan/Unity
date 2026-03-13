@@ -6,14 +6,13 @@ interface MinimapProps {
   units: Unit[];
   viewportDataRef: React.MutableRefObject<{ x: number; y: number; w: number; h: number }>;
   onNavigate: (unitId: number) => void;
-  isSidebarOpen: boolean;
 }
 
-export const Minimap: React.FC<MinimapProps> = ({ units, viewportDataRef, onNavigate, isSidebarOpen }) => {
+export const Minimap: React.FC<MinimapProps> = ({ units, viewportDataRef, onNavigate }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
   
-  // === ИСПРАВЛЕНО: Теперь по умолчанию TRUE (свернуто) ===
+  // По умолчанию свернуто
   const [isMinimized, setIsMinimized] = useState(true);
 
   // 1. Кэшируем статичную сетку 100x100
@@ -40,9 +39,9 @@ export const Minimap: React.FC<MinimapProps> = ({ units, viewportDataRef, onNavi
     });
   }, [units]);
 
-  // 2. Рендерим 60 FPS (с паузой при сворачивании)
+  // 2. Рендерим вьюпорт
   useEffect(() => {
-    if (isMinimized) return; // Экономим ресурсы, если закрыто
+    if (isMinimized) return; 
 
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -93,9 +92,7 @@ export const Minimap: React.FC<MinimapProps> = ({ units, viewportDataRef, onNavi
 
   return (
     <div 
-      className={`fixed bottom-8 z-30 bg-[#141414]/90 backdrop-blur-md p-3 border border-[#262626] rounded-2xl shadow-2xl pointer-events-auto transition-all duration-500 ease-in-out ${
-        isSidebarOpen ? 'right-8 sm:right-[432px]' : 'right-8'
-      }`}
+      className="relative bg-[#141414]/90 backdrop-blur-md p-3 border border-[#262626] rounded-2xl shadow-2xl pointer-events-auto transition-all duration-300 ease-in-out"
     >
       {/* Шапка радара */}
       <div 

@@ -13,7 +13,11 @@ import { ProfileModal } from './components/modals/ProfileModal';
 import { AdminPanel } from './components/modals/AdminPanel';
 import { LegalModal } from './components/modals/LegalModal';
 import { processImage } from './utils/image';
-import { MousePointer2, BoxSelect, LogIn, LogOut, X, Shield, Users, Settings as SettingsIcon, BarChart3, Trash2, Lock, Unlock, Image as ImageIcon, Search, Heart } from 'lucide-react';
+import { 
+  MousePointer2, BoxSelect, LogIn, LogOut, X, Shield, Users, 
+  Settings as SettingsIcon, BarChart3, Trash2, Lock, Unlock, 
+  Image as ImageIcon, Search, Heart, HelpCircle, Mail, MessageSquare, Send 
+} from 'lucide-react';
 import { useGrid, Unit } from './hooks/useGrid';
 import { getUser, getAuthData, initApp, logout, getToken } from './utils/auth';
 
@@ -29,12 +33,12 @@ interface AppSettings {
 
 export default function App() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
-  
+
   useEffect(() => {
     initApp();
     fetch('/api/settings')
-      .then(res => res.json())
-      .then(setSettings);
+    .then(res => res.json())
+    .then(setSettings);
   }, []);
 
   const { units, isLoading, error, refresh } = useGrid();
@@ -68,12 +72,13 @@ export default function App() {
   const [resalePrice, setResalePrice] = useState<number>(0);
   const [isForSale, setIsForSale] = useState<boolean>(false);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
-  
+
   const [activeMenu, setActiveMenu] = useState<{ unit: Unit, x: number, y: number } | null>(null);
-  
+
   const [searchQuery, setSearchQuery] = useState('');
   const [focusUnitId, setFocusUnitId] = useState<number | null>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showSupportMenu, setShowSupportMenu] = useState(false);
 
   const viewportDataRef = useRef({ x: 0, y: 0, w: 100, h: 100 });
 
@@ -150,7 +155,7 @@ export default function App() {
     } else {
       const avgPrice = selectedUnits.reduce((sum, u) => sum + u.sale_price, 0) / selectedUnitIds.length;
       setResalePrice(Number((avgPrice * 1.2).toFixed(2)));
-      
+
       if (user && selectedUnitIds.length === 1 && selectedUnits.length === 1 && selectedUnits[0]?.owner_id === user.id) {
         const selectedUnit = selectedUnits[0];
         setPendingLink(selectedUnit?.metadata?.link || '');
@@ -161,10 +166,10 @@ export default function App() {
     }
   }, [selectedUnitIds.length]); 
 
-const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
+
     const promise = (async () => {
       const base64 = await processImage(file);
       const response = await fetch('/api/upload', {
@@ -175,7 +180,7 @@ const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
           initData: getAuthData()
         })
       });
-      
+
       if (!response.ok) throw new Error('Upload failed');
       const data = await response.json();
       return data.url;
@@ -201,11 +206,11 @@ const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const maxX = Math.max(anchor.x, unit.x);
         const minY = Math.min(anchor.y, unit.y);
         const maxY = Math.max(anchor.y, unit.y);
-        
+
         const newSelection = units
-          .filter(u => u.x >= minX && u.x <= maxX && u.y >= minY && u.y <= maxY)
-          .map(u => u.id);
-        
+        .filter(u => u.x >= minX && u.x <= maxX && u.y >= minY && u.y <= maxY)
+        .map(u => u.id);
+
         setSelectedUnitIds(newSelection);
         return;
       }
@@ -215,9 +220,9 @@ const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       setActiveMenu(null);
       setSelectedUnitIds(prev => 
         prev.includes(unit.id) 
-          ? prev.filter(id => id !== unit.id) 
-          : [...prev, unit.id]
-      );
+        ? prev.filter(id => id !== unit.id) 
+        : [...prev, unit.id]
+        );
       return;
     }
 
@@ -233,7 +238,7 @@ const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
   const handleUpdatePrice = async () => {
     if (selectedUnitIds.length === 0 || !isOwner) return;
     setIsUpdatingPrice(true);
-    
+
     const minX = Math.min(...selectedUnits.map(u => u.x));
     const minY = Math.min(...selectedUnits.map(u => u.y));
     const maxX = Math.max(...selectedUnits.map(u => u.x));
@@ -283,7 +288,7 @@ const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       return;
     }
     setIsBuying(true);
-    
+
     const minX = Math.min(...selectedUnits.map(u => u.x));
     const minY = Math.min(...selectedUnits.map(u => u.y));
     const maxX = Math.max(...selectedUnits.map(u => u.x));
@@ -333,11 +338,11 @@ const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchQuery.trim()) return;
-    
+
     try {
       const res = await fetch(`/api/search?q=${encodeURIComponent(searchQuery)}`);
       const data = await res.json();
-      
+
       if (data.unitIds.length === 0) {
         toast.error('Nothing found');
         return;
@@ -345,7 +350,7 @@ const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
 
       setSelectedUnitIds(data.unitIds);
       setFocusUnitId(data.unitIds[0] ?? null);
-      
+
       if (data.unitIds.length > 1) {
         toast.success(`Found ${data.unitIds.length} units`);
       }
@@ -356,7 +361,7 @@ const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
 
   return (
     <div className="relative w-screen h-screen bg-[#0A0A0A] text-white selection:bg-[#FF5733] selection:text-white">
-      {/* Header */}
+{/* Header */}
       <Header 
         settings={settings}
         user={user}
@@ -371,7 +376,7 @@ const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         handleLogout={handleLogout}
       />
 
-      {/* НОВАЯ ПОДСКАЗКА ДЛЯ МОБИЛЬНЫХ */}
+{/* НОВАЯ ПОДСКАЗКА ДЛЯ МОБИЛЬНЫХ */}
       <AnimatePresence>
         {isMobile && isSelectionMode && (
           <motion.div
@@ -385,10 +390,10 @@ const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
               Drag finger to select
             </span>
           </motion.div>
-        )}
+          )}
       </AnimatePresence>
 
-      {/* Main Canvas */}
+{/* Main Canvas */}
       <div className="w-full h-full">
         <UnityCanvas 
           units={units} 
@@ -404,7 +409,8 @@ const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
           onInteraction={() => setActiveMenu(null)}
         />
       </div>
-      {/* Toolbar (Zoom, Guides, Selection) */}
+
+{/* Toolbar (Zoom, Guides, Selection) */}
       <Toolbar 
         isMobile={isMobile}
         showGuides={showGuides}
@@ -413,7 +419,7 @@ const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         setIsSelectionMode={setIsSelectionMode}
       />
 
-      {/* Hover Info */}
+{/* Hover Info */}
       <AnimatePresence>
         {hoveredUnit && (
           <motion.div
@@ -435,186 +441,237 @@ const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
               Coordinates: X:{hoveredUnit.x} Y:{hoveredUnit.y}
             </div>
           </motion.div>
-        )}
+          )}
       </AnimatePresence>
+      <div className={`fixed z-50 flex items-center gap-3 transition-all duration-300 pointer-events-auto ${
+        isMobile 
+        ? 'bottom-28 left-4' 
+        : `bottom-4 ${selectedUnitIds.length > 0 ? 'right-[416px]' : 'right-4'}`
+      }`}>
 
-      {/* РАДАР: Полностью скрыт на мобилках, виден только на ПК */}
+      <div className="relative">
+        <AnimatePresence>
+          {showSupportMenu && (
+            <motion.div
+              initial={{ opacity: 0, y: 10, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.95 }}
+              className={`absolute bottom-full mb-4 bg-[#0A0A0A] border border-[#262626] rounded-xl p-4 shadow-2xl z-[60] ${
+                isMobile ? 'left-0 w-[80vw]' : 'right-0 w-64'
+              }`}
+            >
+              <div className="flex justify-between items-center mb-4">
+                <span className="text-white font-bold text-[12px] uppercase tracking-widest">Support</span>
+                <button onClick={() => setShowSupportMenu(false)} className="text-gray-500 hover:text-white transition-colors">
+                  <X size={14} />
+                </button>
+              </div>
+
+              <div className="space-y-1">
+                <a href="mailto:support@unity-grid.com" className="flex items-center gap-3 p-2 text-gray-400 hover:text-white hover:bg-[#141414] transition-colors rounded-lg group">
+                  <Mail size={16} />
+                  <span className="text-[10px] font-bold uppercase tracking-widest">Send Email</span>
+                </a>
+                <a href="https://t.me/your_telegram" target="_blank" rel="noreferrer" className="flex items-center gap-3 p-2 text-gray-400 hover:text-white hover:bg-[#141414] transition-colors rounded-lg group">
+                  <Send size={16} />
+                  <span className="text-[10px] font-bold uppercase tracking-widest">Telegram chat</span>
+                </a>
+              </div>
+            </motion.div>
+            )}
+        </AnimatePresence>
+
+        <button 
+          onClick={() => setShowSupportMenu(!showSupportMenu)}
+          className="bg-[#141414]/90 backdrop-blur-md border border-[#262626] rounded-full px-4 py-2.5 flex items-center gap-2 text-gray-400 hover:text-white transition-all hover:border-[#FF5733] shadow-lg"
+        >
+          <HelpCircle size={16} className="text-[#FF5733]" />
+          <span className="text-[10px] uppercase tracking-[0.15em] font-bold whitespace-nowrap">
+            {isMobile ? 'Support' : 'Support center'}
+          </span>
+        </button>
+      </div>
+
+{/* Live Radar (только для ПК) */}
       {!isMobile && (
         <Minimap 
           units={units} 
           viewportDataRef={viewportDataRef} 
           onNavigate={(id) => setFocusUnitId(id)} 
-          isSidebarOpen={selectedUnitIds.length > 0} 
-        />
-      )}
+          />
+          )}
+    </div>
 
-      {/* Floating Menu */}
-      <FloatingMenu 
-        activeMenu={activeMenu}
-        onClose={() => setActiveMenu(null)}
-      />
+    <FloatingMenu 
+      activeMenu={activeMenu}
+      onClose={() => setActiveMenu(null)}
+    />
 
-      {/* Сайдбар */}
-      {selectedUnitIds.length > 0 && (!isMobile || isMobileSidebarOpen) && (
-        <Sidebar 
-          user={user}
-          selectedUnitIds={selectedUnitIds}
-          setSelectedUnitIds={setSelectedUnitIds}
-          selectedUnits={selectedUnits}
-          totalPrice={totalPrice}
-          isOwner={isOwner}
-          pendingImage={pendingImage}
-          setPendingImage={setPendingImage}
-          pendingLink={pendingLink}
-          setPendingLink={setPendingLink}
-          resalePrice={resalePrice}
-          setResalePrice={setResalePrice}
-          isForSale={isForSale} 
-          setIsForSale={setIsForSale}
-          canBuy={canBuy}
-          handleImageUpload={handleImageUpload}
-          handleUpdatePrice={handleUpdatePrice}
-          handleBuy={handleBuy}
-          isUpdatingPrice={isUpdatingPrice}
-          isBuying={isBuying}
-          settings={settings}
-          onLoginClick={() => {
-            setAuthMode('login');
-            setShowAuthModal(true);
-          }}
-          handleModerateUnit={handleModerateUnit}
-          handleResetUnits={handleResetUnits}
-          isMobile={isMobile}
-          onCloseMobile={() => setIsMobileSidebarOpen(false)}
-        />
-      )}
-      {/* Profile Modal */}
-      <ProfileModal 
-        isOpen={showProfileModal}
-        onClose={() => setShowProfileModal(false)}
-        myUnits={myUnits}
-        myTotalValue={myTotalValue}
-        setSelectedUnitIds={setSelectedUnitIds}
-        setFocusUnitId={setFocusUnitId}
-      />
-      {/* Admin Panel Modal */}
-      <AdminPanel 
-        isOpen={showAdminPanel}
-        onClose={() => setShowAdminPanel(false)}
+    {selectedUnitIds.length > 0 && (!isMobile || isMobileSidebarOpen) && (
+      <Sidebar 
         user={user}
-        setGlobalSettings={setSettings}
-      />
-{/* Auth Modal */}
-      <AuthModal 
-        isOpen={showAuthModal}
-        initialMode={authMode}
-        onClose={() => setShowAuthModal(false)}
-        onSuccess={(newUser) => {
-          setUser(newUser);
-          refresh(); // обновляем сетку после логина
+        selectedUnitIds={selectedUnitIds}
+        setSelectedUnitIds={setSelectedUnitIds}
+        selectedUnits={selectedUnits}
+        totalPrice={totalPrice}
+        isOwner={isOwner}
+        pendingImage={pendingImage}
+        setPendingImage={setPendingImage}
+        pendingLink={pendingLink}
+        setPendingLink={setPendingLink}
+        resalePrice={resalePrice}
+        setResalePrice={setResalePrice}
+        isForSale={isForSale} 
+        setIsForSale={setIsForSale}
+        canBuy={canBuy}
+        handleImageUpload={handleImageUpload}
+        handleUpdatePrice={handleUpdatePrice}
+        handleBuy={handleBuy}
+        isUpdatingPrice={isUpdatingPrice}
+        isBuying={isBuying}
+        settings={settings}
+        onLoginClick={() => {
+          setAuthMode('login');
+          setShowAuthModal(true);
         }}
-        onOpenLegal={setLegalType}
-      />
-      {/* Окно с документами */}
-      <LegalModal 
-        isOpen={!!legalType} 
-        type={legalType} 
-        onClose={() => setLegalType(null)} 
-      />
-      <CursorTooltip selectedCount={selectedUnitIds.length} />
-      
-      {/* Background Loading Indicator */}
-      {isLoading && units.length > 0 && (
-        <div className="absolute top-6 left-1/2 -translate-x-1/2 z-50 bg-[#141414] border border-[#262626] px-4 py-2 flex items-center gap-3">
-          <div className="w-2 h-2 bg-[#FF5733] rounded-full animate-pulse" />
-          <span className="text-[8px] uppercase tracking-[0.2em] font-bold text-gray-400">Syncing Grid...</span>
-        </div>
+        handleModerateUnit={handleModerateUnit}
+        handleResetUnits={handleResetUnits}
+        isMobile={isMobile}
+        onCloseMobile={() => setIsMobileSidebarOpen(false)}
+        />
+        )}
+
+{/* Profile Modal */}
+    <ProfileModal 
+      isOpen={showProfileModal}
+      onClose={() => setShowProfileModal(false)}
+      myUnits={myUnits}
+      myTotalValue={myTotalValue}
+      setSelectedUnitIds={setSelectedUnitIds}
+      setFocusUnitId={setFocusUnitId}
+    />
+
+{/* Admin Panel Modal */}
+    <AdminPanel 
+      isOpen={showAdminPanel}
+      onClose={() => setShowAdminPanel(false)}
+      user={user}
+      setGlobalSettings={setSettings}
+    />
+
+{/* Auth Modal */}
+    <AuthModal 
+      isOpen={showAuthModal}
+      initialMode={authMode}
+      onClose={() => setShowAuthModal(false)}
+      onSuccess={(newUser) => {
+        setUser(newUser);
+        refresh(); 
+      }}
+      onOpenLegal={setLegalType}
+    />
+
+{/* Окно с документами */}
+    <LegalModal 
+      isOpen={!!legalType} 
+      type={legalType} 
+      onClose={() => setLegalType(null)} 
+    />
+
+    <CursorTooltip selectedCount={selectedUnitIds.length} />
+
+{/* Background Loading Indicator */}
+    {isLoading && units.length > 0 && (
+      <div className="absolute top-6 left-1/2 -translate-x-1/2 z-50 bg-[#141414] border border-[#262626] px-4 py-2 flex items-center gap-3">
+        <div className="w-2 h-2 bg-[#FF5733] rounded-full animate-pulse" />
+        <span className="text-[8px] uppercase tracking-[0.2em] font-bold text-gray-400">Syncing Grid...</span>
+      </div>
       )}
 
-      {/* Skeletal Loading Overlay */}
-      {((isLoading && units.length === 0 && !forceHideLoading) || error) && (
-        <div className="absolute inset-0 bg-[#0A0A0A] z-50 flex items-center justify-center p-6">
-          <div className="flex flex-col items-center gap-6 max-w-xs text-center">
-            {isLoading && units.length === 0 && !forceHideLoading ? (
-              <>
-                <div className="w-12 h-12 border-4 border-[#262626] border-t-[#FF5733] rounded-full animate-spin" />
-                <div className="text-[10px] uppercase tracking-[0.5em] text-white font-bold animate-pulse">
-                  {settings?.ui_loading || 'Initializing Grid'}
-                </div>
-                {user && (
-                  <div className="text-[8px] uppercase tracking-widest text-gray-500 font-bold mt-2">
-                    Logged in as: {user.first_name}
-                  </div>
-                )}
-                {forceShow && (
-                  <div className="flex flex-col gap-2">
-                    <button 
-                      onClick={() => window.location.reload()}
-                      className="mt-4 text-[10px] uppercase tracking-widest text-gray-500 hover:text-white transition-colors"
-                    >
-                      Taking too long? Reload
-                    </button>
-                    <button 
-                      onClick={() => setForceHideLoading(true)}
-                      className="text-[10px] uppercase tracking-widest text-[#FF5733] hover:text-white transition-colors"
-                    >
-                      Enter Anyway
-                    </button>
-                  </div>
-                )}
-              </>
+{/* Skeletal Loading Overlay */}
+    {((isLoading && units.length === 0 && !forceHideLoading) || error) && (
+      <div className="absolute inset-0 bg-[#0A0A0A] z-50 flex items-center justify-center p-6">
+        <div className="flex flex-col items-center gap-6 max-w-xs text-center">
+          {isLoading && units.length === 0 && !forceHideLoading ? (
+            <>
+            <div className="w-12 h-12 border-4 border-[#262626] border-t-[#FF5733] rounded-full animate-spin" />
+            <div className="text-[10px] uppercase tracking-[0.5em] text-white font-bold animate-pulse">
+              {settings?.ui_loading || 'Initializing Grid'}
+            </div>
+            {user && (
+              <div className="text-[8px] uppercase tracking-widest text-gray-500 font-bold mt-2">
+                Logged in as: {user.first_name}
+              </div>
+              )}
+            {forceShow && (
+              <div className="flex flex-col gap-2">
+                <button 
+                  onClick={() => window.location.reload()}
+                  className="mt-4 text-[10px] uppercase tracking-widest text-gray-500 hover:text-white transition-colors"
+                >
+                  Taking too long? Reload
+                </button>
+                <button 
+                  onClick={() => setForceHideLoading(true)}
+                  className="text-[10px] uppercase tracking-widest text-[#FF5733] hover:text-white transition-colors"
+                >
+                  Enter Anyway
+                </button>
+              </div>
+              )}
+            </>
             ) : (
-              <>
-                <div className="text-[#FF5733] font-bold text-xs uppercase tracking-widest mb-2">Connection Error</div>
-                <div className="text-gray-400 text-[10px] uppercase tracking-widest leading-relaxed">
-                  {error}
-                </div>
-                <div className="flex flex-col gap-2 mt-6">
-                  <button 
-                    onClick={() => refresh()}
-                    className="bg-white text-black px-8 py-3 text-[10px] uppercase tracking-[0.2em] font-bold hover:bg-gray-200 transition-colors"
-                  >
-                    Retry Connection
-                  </button>
-                  <button 
-                    onClick={() => {
-                      localStorage.removeItem('unity_grid_cache');
-                      window.location.reload();
-                    }}
-                    className="text-[10px] uppercase tracking-widest text-gray-500 hover:text-white transition-colors"
-                  >
-                    Clear Cache & Reload
-                  </button>
-                </div>
-              </>
+            <>
+            <div className="text-[#FF5733] font-bold text-xs uppercase tracking-widest mb-2">Connection Error</div>
+            <div className="text-gray-400 text-[10px] uppercase tracking-widest leading-relaxed">
+              {error}
+            </div>
+            <div className="flex flex-col gap-2 mt-6">
+              <button 
+                onClick={() => refresh()}
+                className="bg-white text-black px-8 py-3 text-[10px] uppercase tracking-[0.2em] font-bold hover:bg-gray-200 transition-colors"
+              >
+                Retry Connection
+              </button>
+              <button 
+                onClick={() => {
+                  localStorage.removeItem('unity_grid_cache');
+                  window.location.reload();
+                }}
+                className="text-[10px] uppercase tracking-widest text-gray-500 hover:text-white transition-colors"
+              >
+                Clear Cache & Reload
+              </button>
+            </div>
+            </>
             )}
           </div>
         </div>
-      )}
+        )}
 
-      {/* Мобильная панель Setup & Buy */}
-      {isMobile && selectedUnitIds.length > 0 && !isMobileSidebarOpen && (
-        <div className="fixed bottom-0 left-0 w-full z-40 bg-[#141414] border-t border-[#262626] p-4 flex items-center justify-between pb-10 animate-in slide-in-from-bottom duration-300 pointer-events-auto">
-          <div className="flex flex-col">
-            <span className="text-[10px] text-[#FF5733] uppercase font-bold tracking-widest">Selected Units</span>
-            <span className="text-sm font-bold text-white uppercase">{selectedUnitIds.length} • {totalPrice.toFixed(2)} UNIT</span>
-          </div>
-          <div className="flex gap-2">
-            <button 
-              onClick={() => setSelectedUnitIds([])}
-              className="px-4 py-2 text-[10px] uppercase font-bold text-gray-500 border border-[#262626]"
-            >
-              Clear
-            </button>
-            <button 
-              onClick={() => setIsMobileSidebarOpen(true)}
-              className="bg-[#FF5733] text-white px-6 py-2 text-[10px] uppercase font-bold"
-            >
-              Setup & Buy
-            </button>
-          </div>
+{/* Мобильная панель Setup & Buy */}
+    {isMobile && selectedUnitIds.length > 0 && !isMobileSidebarOpen && (
+      <div className="fixed bottom-0 left-0 w-full z-40 bg-[#141414] border-t border-[#262626] p-4 flex items-center justify-between pb-10 animate-in slide-in-from-bottom duration-300 pointer-events-auto">
+        <div className="flex flex-col">
+          <span className="text-[10px] text-[#FF5733] uppercase font-bold tracking-widest">Selected Units</span>
+          <span className="text-sm font-bold text-white uppercase">{selectedUnitIds.length} • {totalPrice.toFixed(2)} UNIT</span>
         </div>
+        <div className="flex gap-2">
+          <button 
+            onClick={() => setSelectedUnitIds([])}
+            className="px-4 py-2 text-[10px] uppercase font-bold text-gray-500 border border-[#262626]"
+          >
+            Clear
+          </button>
+          <button 
+            onClick={() => setIsMobileSidebarOpen(true)}
+            className="bg-[#FF5733] text-white px-6 py-2 text-[10px] uppercase font-bold"
+          >
+            Setup & Buy
+          </button>
+        </div>
+      </div>
       )}
-    </div>
+  </div>
   );
 }
