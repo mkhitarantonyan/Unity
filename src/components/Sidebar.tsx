@@ -30,6 +30,8 @@ interface SidebarProps {
   handleResetUnits?: (ids: number[]) => Promise<void>;
   isMobile: boolean;
   onCloseMobile: () => void;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -59,6 +61,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   handleResetUnits,
   isMobile,
   onCloseMobile,
+  onZoomIn,
+  onZoomOut,
 }) => {
 
   const [history, setHistory] = useState<any[]>([]);
@@ -109,6 +113,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <h2 className="text-4xl sm:text-5xl font-bold tracking-tighter mt-2 text-white">
               {selectedUnitIds.length === 1 ? `#${selectedUnitIds}` : `${selectedUnitIds.length} Units`}
             </h2>
+            <div className="flex sm:hidden mt-4 gap-2">
+              <button
+                onClick={onZoomIn}
+                className="flex-1 bg-[#141414] text-white py-2 rounded border border-[#262626] hover:border-[#FF5733] transition-colors"
+                title="Zoom In"
+              >
+                +
+              </button>
+              <button
+                onClick={onZoomOut}
+                className="flex-1 bg-[#141414] text-white py-2 rounded border border-[#262626] hover:border-[#FF5733] transition-colors"
+                title="Zoom Out"
+              >
+                -
+              </button>
+            </div>
             
             {selectedUnitIds.length === 1 && selectedUnits[0]?.metadata?.link && (
               <button 

@@ -138,6 +138,14 @@ export default function App() {
     }
   };
 
+  const handleZoomIn = () => {
+    console.log('Zoom In triggered');
+  };
+
+  const handleZoomOut = () => {
+    console.log('Zoom Out triggered');
+  };
+
   const selectedUnits = units.filter(u => selectedUnitIds.includes(u.id));
   const totalPrice = selectedUnits.reduce((sum, u) => sum + u.sale_price, 0);
   const isOwner = user && selectedUnitIds.length > 0 && selectedUnits.every(u => u.owner_id === user.id);
@@ -488,6 +496,8 @@ const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
           handleResetUnits={handleResetUnits}
           isMobile={isMobile}
           onCloseMobile={() => setIsMobileSidebarOpen(false)}
+          onZoomIn={handleZoomIn}
+          onZoomOut={handleZoomOut}
         />
       )}
       {/* Profile Modal */}
