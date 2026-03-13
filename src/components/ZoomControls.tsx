@@ -13,7 +13,7 @@ export const ZoomControls: React.FC<ZoomControlsProps> = ({
   onReset
 }) => {
   return (
-    <div className="fixed bottom-36 right-4 sm:bottom-8 sm:left-[220px] flex flex-col gap-2 z-40">
+    <div className="fixed top-28 right-4 sm:hidden flex flex-col gap-2 z-50">
       <div className="flex flex-col bg-[#141414]/90 backdrop-blur-md border border-[#262626] overflow-hidden shadow-2xl">
         <button 
           onClick={onZoomIn}
