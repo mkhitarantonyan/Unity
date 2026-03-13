@@ -47,13 +47,6 @@ export const Header: React.FC<HeaderProps> = ({
               10% of transactions go to charity
             </span>
           </div>
-          
-          <a 
-            href="mailto:support@unity-grid.com" 
-            className="inline-flex items-center gap-2 bg-[#141414]/80 backdrop-blur-md border border-[#262626] px-3 py-1.5 shadow-lg text-[8px] uppercase tracking-[0.1em] text-gray-500 hover:text-[#FF5733] transition-colors font-bold"
-          >
-            support@unity-grid.com
-          </a>
         </div>
       </div>
       

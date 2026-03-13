@@ -492,7 +492,6 @@ export default function App() {
         </button>
       </div>
 
-{/* Live Radar (только для ПК) */}
       {!isMobile && (
         <Minimap 
           units={units} 
