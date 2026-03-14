@@ -517,9 +517,10 @@ async function startServer() {
       db.prepare(`INSERT INTO orders (order_id, user_id, unit_ids, amount, metadata, status) VALUES (?, ?, ?, ?, ?, 'pending')`)
         .run(orderId, ownerId, JSON.stringify(unitIds), totalPrice, JSON.stringify({ ...metadata, nextSalePrice }));
 
-        const invoicePayload = {
+      const invoicePayload = {
           price_amount: totalPrice,
           price_currency: 'usd',
+          pay_currency: 'usdtbep20', 
           order_id: orderId, 
           ipn_callback_url: `${APP_BASE_URL.replace(/\/$/, '')}/api/webhook/nowpayments`,
           is_fee_paid_by_user: true
