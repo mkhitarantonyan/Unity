@@ -1,21 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as PIXI from 'pixi.js';
 import { Plus, Minus } from 'lucide-react';
-
-interface Unit {
-  id: number;
-  x: number;
-  y: number;
-  owner_id: string | null;
-  current_price: number;
-  sale_price: number;
-  metadata: {
-    title?: string;
-    image_url?: string;
-    link?: string;
-    group?: { minX: number; minY: number; maxX: number; maxY: number; };
-  };
-}
+import type { Unit } from '../types';
 
 interface UnityCanvasProps {
   units: Unit[];
@@ -271,8 +257,7 @@ export const UnityCanvas: React.FC<UnityCanvasProps> = ({
           }
         });
 
-        // ДВИЖОК ПОЛНОСТЬЮ ГОТОВ
-        console.log('[UnityCanvas] PixiJS successfully initialized.');
+        if (import.meta.env.DEV) console.log('[UnityCanvas] PixiJS successfully initialized.');
         setIsPixiReady(true);
 
         (app as any)._unityCleanup = () => {
@@ -378,11 +363,10 @@ export const UnityCanvas: React.FC<UnityCanvasProps> = ({
     }
   }, []);
 
-  // САМАЯ ВАЖНАЯ ЧАСТЬ - Отрисовка
   useEffect(() => {
     unitsRef.current = units;
-    console.log(`[UnityCanvas] Trying to render. Data count: ${units.length}. Pixi Ready: ${isPixiReady}`);
-    
+    if (import.meta.env.DEV) console.log(`[UnityCanvas] Trying to render. Data count: ${units.length}. Pixi Ready: ${isPixiReady}`);
+
     if (isPixiReady && unitsContainerRef.current) {
       renderUnits(unitsContainerRef.current, units);
     }
@@ -517,7 +501,7 @@ export const UnityCanvas: React.FC<UnityCanvasProps> = ({
         style={{ touchAction: 'none' }} 
       />
 
-      <div className="absolute right-4 top-[51%] flex flex-col gap-3 z- sm:hidden pointer-events-auto">
+      <div className="absolute right-4 top-[51%] flex flex-col gap-3 z-10 sm:hidden pointer-events-auto">
         <button 
           onClick={(e) => { e.stopPropagation(); handleZoom('in'); }}
           className="flex items-center justify-center bg-[#141414]/80 backdrop-blur-md border border-[#262626] p-3 text-gray-400 hover:text-white hover:border-[#FF5733] transition-colors shadow-lg active:scale-95"

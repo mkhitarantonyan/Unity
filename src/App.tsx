@@ -19,7 +19,7 @@ import {
   Image as ImageIcon, Search, Heart, HelpCircle, Mail, MessageSquare, Send 
 } from 'lucide-react';
 import { useGrid, Unit } from './hooks/useGrid';
-import { getUser, getAuthData, initApp, logout, getToken } from './utils/auth';
+import { getUser, initApp, logout, getToken } from './utils/auth';
 
 interface AppSettings {
   ui_title: string;
@@ -153,18 +153,21 @@ export default function App() {
       setPendingImage(null);
       setPendingLink('');
     } else {
-      const avgPrice = selectedUnits.reduce((sum, u) => sum + u.sale_price, 0) / selectedUnitIds.length;
+      const currentSelected = units.filter(u => selectedUnitIds.includes(u.id));
+      const avgPrice = currentSelected.length
+        ? currentSelected.reduce((sum, u) => sum + u.sale_price, 0) / currentSelected.length
+        : 0;
       setResalePrice(Number((avgPrice * 1.2).toFixed(2)));
 
-      if (user && selectedUnitIds.length === 1 && selectedUnits.length === 1 && selectedUnits[0]?.owner_id === user.id) {
-        const selectedUnit = selectedUnits[0];
-        setPendingLink(selectedUnit?.metadata?.link || '');
+      if (user && selectedUnitIds.length === 1 && currentSelected.length === 1 && currentSelected[0]?.owner_id === user.id) {
+        const selectedUnit = currentSelected[0];
+        setPendingLink(selectedUnit?.metadata?.link ?? '');
         setIsForSale(!!selectedUnit?.metadata?.is_for_sale);
       } else {
         setIsForSale(false);
       }
     }
-  }, [selectedUnitIds.length]); 
+  }, [selectedUnitIds, units, user]); 
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -174,10 +177,10 @@ export default function App() {
       const base64 = await processImage(file);
       const response = await fetch('/api/upload', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(getToken() && { Authorization: `Bearer ${getToken()}` }) },
         body: JSON.stringify({ 
           image: base64,
-          initData: getAuthData()
+          token: getToken()
         })
       });
 
@@ -247,12 +250,12 @@ export default function App() {
     try {
       const response = await fetch('/api/update-price', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(getToken() && { Authorization: `Bearer ${getToken()}` }) },
         body: JSON.stringify({
           unitIds: selectedUnitIds,
           ownerId: user.id,
           nextSalePrice: resalePrice,
-          initData: getAuthData(),
+          token: getToken(),
           metadata: pendingImage || pendingLink ? {
             title: `Owned by ${user.first_name}`,
             link: pendingLink,
@@ -295,13 +298,13 @@ export default function App() {
     const maxY = Math.max(...selectedUnits.map(u => u.y));
 
     try {
-      const response = await fetch('/api/buy-bulk-crypto', {
+      const response = await fetch('/api/buy-bulk-nowpayments', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(getToken() && { Authorization: `Bearer ${getToken()}` }) },
         body: JSON.stringify({
           unitIds: selectedUnitIds,
           ownerId: user.id,
-          initData: getAuthData(),
+          token: getToken(),
           nextSalePrice: resalePrice,
           metadata: {
             title: `Owned by ${user.first_name}`,

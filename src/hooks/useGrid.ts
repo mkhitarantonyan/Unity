@@ -1,15 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { io } from 'socket.io-client';
+import type { Unit } from '../types';
 
-export interface Unit {
-  id: number;
-  x: number;
-  y: number;
-  owner_id: string | null;
-  current_price: number;
-  sale_price: number;
-  metadata: any;
-}
+export type { Unit };
 
 const socket = io('/', { transports: ['websocket', 'polling'] });
 
@@ -54,8 +47,8 @@ export function useGrid() {
     fetchGrid();
 
     socket.on('grid_update', (updatedUnits: Unit[]) => {
-      console.log('Live update received:', updatedUnits);
-      
+      if (import.meta.env.DEV) console.log('Live update received:', updatedUnits);
+
       setUnits(prevUnits => {
         const nextUnits = [...prevUnits];
         updatedUnits.forEach(u => {

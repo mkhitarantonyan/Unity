@@ -65,7 +65,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   useEffect(() => {
     if (selectedUnitIds.length === 1) {
-      fetch(`/api/unit/${selectedUnitIds}/history`)
+      fetch(`/api/unit/${selectedUnitIds[0]}/history`)
         .then(res => res.json())
         .then(data => setHistory(data))
         .catch(() => setHistory([]));

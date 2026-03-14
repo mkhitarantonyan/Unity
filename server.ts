@@ -7,6 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 import { z } from 'zod';
+import axios from 'axios';
 import { v2 as cloudinary } from 'cloudinary';
 import bcrypt from 'bcryptjs';
 import rateLimit from 'express-rate-limit'; 
@@ -150,30 +151,12 @@ if (count.count === 0) {
   console.log('Seeding complete.');
 }
 
-function validateTelegramData(initData: string): boolean {
-  if (initData === 'WEB_DEMO' && process.env.NODE_ENV !== 'production') return true;
-  const botToken = process.env.BOT_TOKEN;
-  if (!botToken) {
-    console.error('BOT_TOKEN not set. Rejecting Telegram initData.');
-    return false;
-  }
-  if (!initData) return false;
-  try {
-    const urlParams = new URLSearchParams(initData);
-    const hash = urlParams.get('hash');
-    urlParams.delete('hash');
-    const params = Array.from(urlParams.entries()).map(([key, value]) => `${key}=${value}`).sort().join('\n');
-    const secretKey = crypto.createHmac('sha256', 'WebAppData').update(botToken).digest();
-    const calculatedHash = crypto.createHmac('sha256', secretKey).update(params).digest('hex');
-    return calculatedHash === hash;
-  } catch (e) {
-    return false;
-  }
-}
-
-async function verifyPayment(paymentId: string | undefined, amount: number): Promise<boolean> {
-  if (!paymentId) return false;
-  return paymentId.startsWith('PAY_') || paymentId.startsWith('TEST_');
+function validateAuth(token: string): boolean {
+  if (!token || typeof token !== 'string') return false;
+  const session = db.prepare(
+    "SELECT 1 FROM sessions WHERE token = ? AND datetime(created_at, '+24 hours') > datetime('now')"
+  ).get(token.trim());
+  return !!session;
 }
 
 const BuyBulkSchema = z.object({
@@ -181,8 +164,7 @@ const BuyBulkSchema = z.object({
   ownerId: z.string(),
   nextSalePrice: z.number().optional(),
   metadata: z.record(z.string(), z.any()),
-  initData: z.string(),
-  paymentId: z.string().optional()
+  token: z.string()
 });
 
 const UpdatePriceSchema = z.object({
@@ -190,7 +172,7 @@ const UpdatePriceSchema = z.object({
   ownerId: z.string(),
   nextSalePrice: z.number(),
   metadata: z.record(z.string(), z.any()).optional(),
-  initData: z.string()
+  token: z.string()
 });
 
 const AuthSchema = z.object({
@@ -252,7 +234,7 @@ async function startServer() {
   
   const httpServer = createHttpServer(app);
   const io = new SocketIOServer(httpServer, {
-    cors: { origin: '*' }
+    cors: { origin: process.env.APP_URL || '*' }
   });
 
   const pendingGridUpdates = new Map<number, any>();
@@ -270,6 +252,68 @@ async function startServer() {
     socket.on('disconnect', () => {
       console.log('User disconnected:', socket.id);
     });
+  });
+
+  // NOWPayments webhook must receive raw body for signature verification (before express.json)
+  app.post('/api/webhook/nowpayments', express.raw({ type: 'application/json' }), (req, res, next) => {
+    const signature = req.headers['x-nowpayments-sig'] as string;
+    const ipnSecret = process.env.NOWPAYMENTS_IPN_SECRET;
+    if (!ipnSecret || !signature) {
+      return res.status(400).send('Missing IPN secret or signature');
+    }
+    const rawBody = (req as any).body as Buffer;
+    if (!rawBody || !Buffer.isBuffer(rawBody)) {
+      return res.status(400).send('Invalid body');
+    }
+    const expectedSig = crypto.createHmac('sha512', ipnSecret).update(rawBody).digest('hex');
+    if (signature !== expectedSig) return res.status(403).send('Invalid signature');
+
+    let body: any;
+    try {
+      body = JSON.parse(rawBody.toString('utf8'));
+    } catch {
+      return res.status(400).send('Invalid JSON');
+    }
+
+    const { payment_status, order_id } = body;
+    if (payment_status !== 'finished') return res.status(200).send('Ignored');
+
+    try {
+      const order = db.prepare('SELECT * FROM orders WHERE order_id = ? AND status = "pending"').get(order_id) as any;
+      if (!order) return res.status(200).send('OK');
+
+      const unitIds = JSON.parse(order.unit_ids);
+      const meta = JSON.parse(order.metadata);
+      const placeholders = unitIds.map(() => '?').join(',');
+      const units = db.prepare(`SELECT * FROM units WHERE id IN (${placeholders})`).all(...unitIds) as any[];
+
+      const update = db.prepare(`UPDATE units SET owner_id = ?, current_price = sale_price, sale_price = ?, metadata = ? WHERE id = ?`);
+      const historyInsert = db.prepare('INSERT INTO unit_history (unit_id, buyer_id, price) VALUES (?, ?, ?)');
+
+      const processTransaction = db.transaction(() => {
+        db.prepare('UPDATE orders SET status = "completed" WHERE order_id = ?').run(order_id);
+        let appliedNextPrice = 1.0;
+        for (const unit of units) {
+          const minNext = unit.sale_price * 1.2;
+          const maxNext = unit.sale_price * 2.0;
+          const finalNext = Math.max(minNext, Math.min(maxNext, meta.nextSalePrice ?? minNext));
+          appliedNextPrice = finalNext;
+          update.run(order.user_id, finalNext, JSON.stringify(meta), unit.id);
+          historyInsert.run(unit.id, order.user_id, unit.sale_price);
+        }
+        db.prepare('INSERT INTO transactions (id, user_id, amount) VALUES (?, ?, ?)').run(crypto.randomUUID(), order.user_id, order.amount);
+      });
+      processTransaction();
+
+      const updatedUnits = db.prepare(`SELECT * FROM units WHERE id IN (${placeholders})`).all(...unitIds) as any[];
+      updateCacheForUnits(updatedUnits, order.user_id, meta.nextSalePrice ?? (updatedUnits[0]?.sale_price * 1.2), meta);
+      updatedUnits.forEach((u: any) => pendingGridUpdates.set(u.id, u));
+
+      res.status(200).send('OK');
+    } catch (error) {
+      console.error('Webhook nowpayments error:', error);
+      res.status(500).send('Server Error');
+    }
   });
 
   app.use(express.json({ limit: '10mb' }));
@@ -291,10 +335,13 @@ async function startServer() {
   });
 
   app.post('/api/upload', uploadLimiter, async (req, res) => {
-    const { image, initData } = req.body;
-    
-    if (!validateTelegramData(initData)) {
-      return res.status(401).json({ error: 'Invalid authentication data' });
+    const token = req.body?.token ?? req.headers['authorization']?.replace(/^Bearer\s+/i, '');
+    if (!validateAuth(token)) {
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+    const image = req.body?.image;
+    if (!image || typeof image !== 'string') {
+      return res.status(400).json({ error: 'Missing or invalid image (base64)' });
     }
 
     const cloud = getCloudinary();
@@ -400,9 +447,8 @@ async function startServer() {
   app.post('/api/update-price', (req, res) => {
     const result = UpdatePriceSchema.safeParse(req.body);
     if (!result.success) return res.status(400).json({ error: result.error.message });
-    
-    const { unitIds, ownerId, nextSalePrice, metadata, initData } = result.data;
-    if (!validateTelegramData(initData)) return res.status(401).json({ error: 'Invalid authentication data' });
+    const { unitIds, ownerId, nextSalePrice, metadata, token } = result.data;
+    if (!validateAuth(token)) return res.status(401).json({ error: 'Invalid or expired token' });
 
     try {
       const placeholders = unitIds.map(() => '?').join(',');
@@ -439,114 +485,62 @@ async function startServer() {
     }
   });
 
-// --- НАСТРОЙКИ CRYPTOMUS ---
-  const CRYPTOMUS_MERCHANT_ID = process.env.CRYPTOMUS_MERCHANT_ID || 'твой_merchant_id';
-  const CRYPTOMUS_API_KEY = process.env.CRYPTOMUS_API_KEY || 'твой_api_key';
+  const NOWPAYMENTS_API_KEY = process.env.NOWPAYMENTS_API_KEY;
+  const APP_BASE_URL = process.env.APP_URL || process.env.BASE_URL || 'https://your-app.onrender.com';
 
-  // 1. Создание заказа и ссылки на оплату
-  app.post('/api/buy-bulk-crypto', async (req, res) => {
-    const { unitIds, ownerId, metadata, nextSalePrice, initData } = req.body;
-    if (!validateTelegramData(initData)) return res.status(401).json({ error: 'Invalid authentication data' });
+  app.post('/api/buy-bulk-nowpayments', async (req, res) => {
+    const token = req.body?.token ?? req.headers['authorization']?.replace(/^Bearer\s+/i, '');
+    if (!validateAuth(token)) return res.status(401).json({ error: 'Invalid or expired token' });
+
+    const { unitIds, ownerId, metadata, nextSalePrice } = req.body;
+    if (!Array.isArray(unitIds) || unitIds.length === 0 || !ownerId) {
+      return res.status(400).json({ error: 'Missing unitIds, ownerId or invalid payload' });
+    }
+
+    if (!NOWPAYMENTS_API_KEY) {
+      return res.status(500).json({ error: 'Payment gateway not configured' });
+    }
 
     try {
       const placeholders = unitIds.map(() => '?').join(',');
       const units = db.prepare(`SELECT * FROM units WHERE id IN (${placeholders})`).all(...unitIds) as any[];
-      
+
       if (units.length !== unitIds.length) return res.status(404).json({ error: 'Some units not found' });
-      
-      const allForSale = units.every(u => !u.owner_id || JSON.parse(u.metadata || '{}').is_for_sale === true);
+      const allForSale = units.every(u => !u.owner_id || (() => { try { return JSON.parse(u.metadata || '{}').is_for_sale === true; } catch { return false; } })());
       if (!allForSale) return res.status(403).json({ error: 'One or more units are locked' });
 
-      const totalPrice = units.reduce((sum, u) => sum + u.sale_price, 0);
+      const totalPrice = units.reduce((sum: number, u: any) => sum + u.sale_price, 0);
       const orderId = crypto.randomUUID();
 
       db.prepare(`INSERT INTO orders (order_id, user_id, unit_ids, amount, metadata, status) VALUES (?, ?, ?, ?, ?, 'pending')`)
         .run(orderId, ownerId, JSON.stringify(unitIds), totalPrice, JSON.stringify({ ...metadata, nextSalePrice }));
 
-      const payload = {
-        amount: totalPrice.toString(),
-        currency: 'USD',
-        order_id: orderId,
-        url_callback: 'https://твой-домен.com/api/webhook/cryptomus', // ЗАМЕНИ НА СВОЙ БОЕВОЙ ДОМЕН!
-        url_return: 'https://твой-домен.com/',
-        is_payment_multiple: false,
-        lifetime: 3600
+      const invoicePayload = {
+        price_amount: totalPrice,
+        price_currency: 'usd',
+        pay_currency: 'ton',
+        order_id,
+        ipn_callback_url: `${APP_BASE_URL.replace(/\/$/, '')}/api/webhook/nowpayments`,
+        is_fee_paid_by_user: true
       };
 
-      const dataBuffer = Buffer.from(JSON.stringify(payload)).toString('base64');
-      const sign = crypto.createHash('md5').update(dataBuffer + CRYPTOMUS_API_KEY).digest('hex');
-
-      const response = await fetch('https://api.cryptomus.com/v1/payment', {
-        method: 'POST',
-        headers: { 'merchant': CRYPTOMUS_MERCHANT_ID, 'sign': sign, 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
-      const result = await response.json();
-      if (result.state !== 0) throw new Error(result.message || 'Payment gateway error');
-
-      res.json({ paymentUrl: result.result.url });
-    } catch (error) {
-      console.error('Crypto order error:', error);
-      res.status(500).json({ error: 'Failed to create payment link' });
-    }
-  });
-
-  // 2. Webhook (Сюда Cryptomus постучится об успешной оплате)
-  app.post('/api/webhook/cryptomus', express.json(), async (req, res) => {
-    const { sign } = req.body;
-    if (!sign) return res.status(400).send('No signature');
-
-    const bodyWithoutSign = { ...req.body };
-    delete bodyWithoutSign.sign;
-    
-    const payloadBuffer = Buffer.from(JSON.stringify(bodyWithoutSign)).toString('base64');
-    const expectedSign = crypto.createHash('md5').update(payloadBuffer + CRYPTOMUS_API_KEY).digest('hex');
-
-    if (sign !== expectedSign) return res.status(403).send('Invalid signature');
-
-    const { order_id, status } = req.body;
-    if (status !== 'paid' && status !== 'paid_over') return res.status(200).send('Ignored status');
-
-    try {
-      const order = db.prepare('SELECT * FROM orders WHERE order_id = ? AND status = "pending"').get(order_id) as any;
-      if (!order) return res.status(200).send('Order already processed or not found');
-
-      const unitIds = JSON.parse(order.unit_ids);
-      const meta = JSON.parse(order.metadata);
-      const placeholders = unitIds.map(() => '?').join(',');
-      const units = db.prepare(`SELECT * FROM units WHERE id IN (${placeholders})`).all(...unitIds) as any[];
-
-      const update = db.prepare(`UPDATE units SET owner_id = ?, current_price = sale_price, sale_price = ?, metadata = ? WHERE id = ?`);
-      const historyInsert = db.prepare('INSERT INTO unit_history (unit_id, buyer_id, price) VALUES (?, ?, ?)');
-
-      const processTransaction = db.transaction(() => {
-        db.prepare('UPDATE orders SET status = "completed" WHERE order_id = ?').run(order_id);
-        
-        let appliedNextPrice = 1.0;
-        for (const unit of units) {
-          const minNext = unit.sale_price * 1.2;
-          const maxNext = unit.sale_price * 2.0;
-          const finalNext = Math.max(minNext, Math.min(maxNext, meta.nextSalePrice || minNext));
-          appliedNextPrice = finalNext;
-          
-          update.run(order.user_id, finalNext, JSON.stringify(meta), unit.id);
-          historyInsert.run(unit.id, order.user_id, unit.sale_price);
+      const { data } = await axios.post('https://api.nowpayments.io/v1/invoice', invoicePayload, {
+        headers: {
+          'x-api-key': NOWPAYMENTS_API_KEY,
+          'Content-Type': 'application/json'
         }
-        db.prepare('INSERT INTO transactions (id, user_id, amount) VALUES (?, ?, ?)').run(crypto.randomUUID(), order.user_id, order.amount);
       });
 
-      processTransaction();
-
-      // Обновляем сетку
-      const updatedUnits = db.prepare(`SELECT * FROM units WHERE id IN (${placeholders})`).all(...unitIds);
-      updateCacheForUnits(updatedUnits, order.user_id, meta.nextSalePrice || updatedUnits[0].sale_price * 1.2, meta);
-      updatedUnits.forEach(u => pendingGridUpdates.set(u.id, u));
-
-      res.status(200).send('OK');
-    } catch (error) {
-      console.error('Webhook processing error:', error);
-      res.status(500).send('Server Error');
+      const paymentUrl = data?.invoice_url ?? data?.url ?? data?.result?.invoice_url ?? data?.result?.url;
+      if (!paymentUrl) {
+        console.error('NOWPayments response:', data);
+        return res.status(500).json({ error: 'Payment gateway did not return payment URL' });
+      }
+      res.json({ paymentUrl, orderId });
+    } catch (err: any) {
+      console.error('NOWPayments invoice error:', err?.response?.data ?? err.message);
+      const msg = err?.response?.data?.message ?? err?.message ?? 'Failed to create payment';
+      res.status(500).json({ error: msg });
     }
   });
 
@@ -560,11 +554,12 @@ async function startServer() {
         return res.json({ unitIds: unit ? [unit.id] : [] });
       } else {
         const searchTerm = q.startsWith('@') ? q.substring(1) : q;
+        const pattern = '%' + searchTerm + '%';
         const units = db.prepare(`
           SELECT units.id FROM units 
           JOIN users ON units.owner_id = users.id 
           WHERE users.username LIKE ? COLLATE NOCASE
-        `).all(`%${searchTerm}%`) as { id: number }[];
+        `).all(pattern) as { id: number }[];
         
         return res.json({ unitIds: units.map(u => u.id) });
       }
