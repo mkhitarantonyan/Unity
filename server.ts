@@ -515,14 +515,14 @@ async function startServer() {
       db.prepare(`INSERT INTO orders (order_id, user_id, unit_ids, amount, metadata, status) VALUES (?, ?, ?, ?, ?, 'pending')`)
         .run(orderId, ownerId, JSON.stringify(unitIds), totalPrice, JSON.stringify({ ...metadata, nextSalePrice }));
 
-      const invoicePayload = {
-        price_amount: totalPrice,
-        price_currency: 'usd',
-        pay_currency: 'ton',
-        order_id,
-        ipn_callback_url: `${APP_BASE_URL.replace(/\/$/, '')}/api/webhook/nowpayments`,
-        is_fee_paid_by_user: true
-      };
+        const invoicePayload = {
+          price_amount: totalPrice,
+          price_currency: 'usd',
+          pay_currency: 'ton',
+          order_id: orderId, 
+          ipn_callback_url: `${APP_BASE_URL.replace(/\/$/, '')}/api/webhook/nowpayments`,
+          is_fee_paid_by_user: true
+        };
 
       const { data } = await axios.post('https://api.nowpayments.io/v1/invoice', invoicePayload, {
         headers: {
