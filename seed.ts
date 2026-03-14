@@ -2,15 +2,19 @@ import Database from 'better-sqlite3';
 
 // === НАСТРОЙКИ ===
 // ВПИШИ СЮДА СВОЙ ЛОГИН, под которым ты зарегистрировался в Unity!
-const ADMIN_USERNAME = 'admin'; 
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin'; 
 
-const db = new Database('unity.db');
+const DB_PATH = process.env.DB_PATH || 'unity.db';
+const GRID_WIDTH = 100; // Ширина сетки
+
+const db = new Database(DB_PATH);
 
 console.log('Поиск администратора...');
 const admin = db.prepare('SELECT id FROM users WHERE username = ?').get(ADMIN_USERNAME) as { id: string } | undefined;
 
 if (!admin) {
   console.error(`❌ Ошибка: Пользователь '${ADMIN_USERNAME}' не найден в базе.`);
+  db.close();
   process.exit(1);
 }
 
@@ -72,13 +76,13 @@ const runSeed = db.transaction(() => {
       group: (width > 1 || height > 1) ? { minX: startX, minY: startY, maxX, maxY } : undefined
     });
 
-    const currentPrice = 5.0; // Базовая цена
-    const nextSalePrice = 6.0; // Цена для перепродажи (+20%)
+    const currentPrice = 10.0; // Базовая цена
+    const nextSalePrice = currentPrice * 1.2; // Цена для перепродажи (+20%)
 
     // Проходимся по каждой клетке внутри блока
     for (let y = startY; y <= maxY; y++) {
       for (let x = startX; x <= maxX; x++) {
-        const unitId = y * 100 + x; // Формула сетки 100x100
+        const unitId = y * GRID_WIDTH + x; // Формула сетки
         
         // Обновляем юнит
         updateUnit.run(adminId, currentPrice, nextSalePrice, metadata, unitId);
@@ -97,4 +101,6 @@ try {
   console.log('Перезапусти сервер (npm run dev), чтобы сбросить кеш, и проверь сетку!');
 } catch (error) {
   console.error('❌ Ошибка при обновлении базы:', error);
+} finally {
+  db.close();
 }

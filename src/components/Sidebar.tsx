@@ -277,20 +277,43 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <Lock size={16} /> Not For Sale
               </button>
             ) : (
-              <button
-                onClick={handleBuy}
-                disabled={isBuying || !pendingImage}
-                className="w-full bg-[#FF5733] text-white py-5 font-bold uppercase tracking-[0.2em] text-xs hover:bg-[#E64A19] transition-colors disabled:opacity-50 flex items-center justify-center gap-3 shadow-lg"
-              >
-                {isBuying ? (
-                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                ) : (
-                  <>
-                    <ShoppingCart size={16} /> 
-                    {settings?.ui_buy_button || 'Buy Units'}
-                  </>
-                )}
-              </button>
+              <div className="bg-[#141414] border border-[#262626] p-4 flex flex-col gap-4 shadow-lg">
+                <div className="flex justify-between items-center border-b border-[#262626] pb-3">
+                  <span className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">Payment Summary</span>
+                  <span className="text-xl font-bold text-white">${totalPrice.toFixed(2)} USD</span>
+                </div>
+                
+                <div className="flex items-center gap-3">
+                  <svg className="w-8 h-8 shrink-0" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="16" cy="16" r="16" fill="#26A17B"/>
+                    <path d="M16 11.5c4.5 0 8.1-1.3 8.1-2.9 0-1.6-3.6-2.9-8.1-2.9S7.9 7 7.9 8.6c0 1.6 3.6 2.9 8.1 2.9zm0 1.4c-4.6 0-8.3-1.4-8.3-3v1.5c0 1.6 3.7 3 8.3 3s8.3-1.4 8.3-3v-1.5c0 1.6-3.7 3-8.3 3zm-2.1 1.6v6h4.1v-6c4-.3 6.9-1.5 6.9-2.9 0-1.6-4-3-8.9-3s-8.9 1.4-8.9 3c0 1.4 2.9 2.6 6.9 2.9z" fill="#FFF"/>
+                  </svg>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] uppercase tracking-widest text-white font-bold">Payment Method</span>
+                    <span className="text-[9px] uppercase tracking-widest text-gray-500">USDT (Binance Smart Chain)</span>
+                  </div>
+                </div>
+
+                <div className="mt-1">
+                  <button
+                    onClick={handleBuy}
+                    disabled={isBuying || !pendingImage}
+                    className="w-full bg-[#FF5733] text-white py-4 font-bold uppercase tracking-[0.2em] text-xs hover:bg-[#E64A19] transition-colors disabled:opacity-50 flex items-center justify-center gap-3"
+                  >
+                    {isBuying ? (
+                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <>
+                        <ShoppingCart size={16} /> 
+                        Pay with Crypto
+                      </>
+                    )}
+                  </button>
+                  <p className="text-[8px] text-gray-500 text-center uppercase tracking-widest leading-relaxed mt-3">
+                    You will be redirected to NOWPayments<br/>to complete your transaction via BSC network.
+                  </p>
+                </div>
+              </div>
             )}
             {!isOwner && canBuy && !pendingImage && user && (
                <p className="text-[8px] text-gray-500 text-center uppercase mt-3 tracking-widest animate-pulse">
