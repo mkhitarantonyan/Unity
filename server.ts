@@ -378,13 +378,16 @@ async function startServer() {
     const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number };
     const isAdmin = userCount.count === 0 ? 1 : 0;
 
-    try {
+try {
       const hashedPassword = bcrypt.hashSync(password, 10);
 
       db.prepare('INSERT INTO users (id, username, password, first_name, is_admin) VALUES (?, ?, ?, ?, ?)')
         .run(id, username, hashedPassword, firstName || username, isAdmin);
 
-      res.json({ id, username, first_name: firstName || username, is_admin: isAdmin === 1 });
+      const token = crypto.randomBytes(32).toString('hex');
+      db.prepare('INSERT INTO sessions (token, user_id) VALUES (?, ?)').run(token, id);
+
+      res.json({ token, id, username, first_name: firstName || username, is_admin: isAdmin === 1 });
     } catch (error: any) {
       if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
         res.status(400).json({ error: 'Username already exists' });
@@ -392,7 +395,6 @@ async function startServer() {
         res.status(500).json({ error: 'Registration failed' });
       }
     }
-  });
 
   app.post('/api/login', authLimiter, (req, res) => {
     const result = AuthSchema.omit({ firstName: true }).safeParse(req.body);
