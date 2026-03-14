@@ -518,7 +518,6 @@ async function startServer() {
         const invoicePayload = {
           price_amount: totalPrice,
           price_currency: 'usd',
-          pay_currency: 'ton',
           order_id: orderId, 
           ipn_callback_url: `${APP_BASE_URL.replace(/\/$/, '')}/api/webhook/nowpayments`,
           is_fee_paid_by_user: true
