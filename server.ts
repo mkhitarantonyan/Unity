@@ -395,6 +395,7 @@ try {
         res.status(500).json({ error: 'Registration failed' });
       }
     }
+  });
 
   app.post('/api/login', authLimiter, (req, res) => {
     const result = AuthSchema.omit({ firstName: true }).safeParse(req.body);
@@ -447,7 +448,6 @@ try {
       res.status(500).json({ error: 'Failed to fetch grid' });
     }
   });
-
   app.post('/api/update-price', (req, res) => {
     const result = UpdatePriceSchema.safeParse(req.body);
     if (!result.success) return res.status(400).json({ error: result.error.message });
