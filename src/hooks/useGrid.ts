@@ -21,7 +21,7 @@ export function useGrid() {
         y: Math.floor(i / 100),
         owner_id: null,
         current_price: 0,
-        sale_price: 5.0, // <-- Та самая цена 5$, которую мы исправили!
+        sale_price: 10.0,
         metadata: {}
       }));
 

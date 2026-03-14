@@ -16,6 +16,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const db = new Database('unity.db');
+// Temporary migration: ensure minimal price is 10.0 for all free units
+db.prepare("UPDATE units SET sale_price = 10.0 WHERE owner_id IS NULL AND sale_price < 10.0").run();
 db.pragma('journal_mode = WAL');
 
 // Initialize database
@@ -42,7 +44,7 @@ db.exec(`
     y INTEGER NOT NULL,
     owner_id TEXT,
     current_price REAL DEFAULT 0,
-    sale_price REAL DEFAULT 5.0,
+    sale_price REAL DEFAULT 10.0,
     metadata TEXT DEFAULT '{}'
   );
 
@@ -99,7 +101,7 @@ function getProcessedGrid() {
       metadata = {};
     }
     
-    const isDefault = !u.owner_id && u.sale_price === 5.0 && Object.keys(metadata || {}).length === 0;
+    const isDefault = !u.owner_id && u.sale_price === 10.0 && Object.keys(metadata || {}).length === 0;
     
     if (!isDefault) {
       cachedGridMap!.set(u.id, {
@@ -134,14 +136,14 @@ function updateCacheForUnits(units: any[], owner: string, finalNext: number, met
   });
 }
 
-db.prepare('UPDATE units SET sale_price = 5.0 WHERE owner_id IS NULL AND sale_price != 5.0').run();
+db.prepare('UPDATE units SET sale_price = 10.0 WHERE owner_id IS NULL AND sale_price != 10.0').run();
 
 const count = db.prepare('SELECT COUNT(*) as count FROM units').get() as { count: number };
 if (count.count === 0) {
   console.log('Seeding 10,000 units...');
   const units = [];
   for (let i = 0; i < 10000; i++) {
-    units.push({ id: i, x: i % 100, y: Math.floor(i / 100), sale_price: 5.0 });
+    units.push({ id: i, x: i % 100, y: Math.floor(i / 100), sale_price: 10.0 });
   }
   const insert = db.prepare('INSERT INTO units (id, x, y, sale_price) VALUES (?, ?, ?, ?)');
   const insertMany = db.transaction((units) => {
@@ -463,8 +465,8 @@ async function startServer() {
 
       const updateMany = db.transaction((nextPrice: number, meta: string | null) => {
         for (const unit of units) {
-          const minNext = (unit.current_price || 5.0) * 1.2;
-          const maxNext = (unit.current_price || 5.0) * 2.0;
+          const minNext = (unit.current_price || 10.0) * 1.2;
+          const maxNext = (unit.current_price || 10.0) * 2.0;
           const finalNext = Math.max(minNext, Math.min(maxNext, nextPrice));
           appliedNextPrice = finalNext; 
           update.run(finalNext, meta, unit.id);
@@ -651,7 +653,7 @@ app.post('/api/admin/settings', checkAdmin, (req, res) => {
         existing.metadata = {};
         pendingGridUpdates.set(id, existing);
       } else {
-        pendingGridUpdates.set(id, { id, owner_id: null, sale_price: 5.0, metadata: {} });
+        pendingGridUpdates.set(id, { id, owner_id: null, sale_price: 10.0, metadata: {} });
       }
     });
 
@@ -663,11 +665,11 @@ app.post('/api/admin/settings', checkAdmin, (req, res) => {
     if (!Array.isArray(unitIds) || unitIds.length === 0) return res.json({ success: true });
 
     const placeholders = unitIds.map(() => '?').join(',');
-    db.prepare(`UPDATE units SET owner_id = NULL, current_price = 0, sale_price = 5.0, metadata = '{}' WHERE id IN (${placeholders})`).run(...unitIds);
+    db.prepare(`UPDATE units SET owner_id = NULL, current_price = 0, sale_price = 10.0, metadata = '{}' WHERE id IN (${placeholders})`).run(...unitIds);
     
     unitIds.forEach(id => {
       cachedGridMap?.delete(id);
-      pendingGridUpdates.set(id, { id, owner_id: null, current_price: 0, sale_price: 5.0, metadata: {} });
+      pendingGridUpdates.set(id, { id, owner_id: null, current_price: 0, sale_price: 10.0, metadata: {} });
     });
     
     res.json({ success: true });

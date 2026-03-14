@@ -173,7 +173,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <div className="flex justify-between items-end">
                 <div>
                   <div className="text-[9px] uppercase tracking-widest text-gray-500 font-bold">Total Price</div>
-                  <div className="text-2xl font-bold text-white mt-1">{totalPrice.toFixed(2)} UNIT</div>
+                  <div className="text-2xl font-bold text-white mt-1">{totalPrice.toFixed(2)} USD</div>
                 </div>
               </div>
 
@@ -221,7 +221,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         <span className="text-white font-bold uppercase tracking-tight">@{entry.buyer_name}</span>
                         <span className="text-gray-600">{new Date(entry.timestamp).toLocaleDateString()}</span>
                       </div>
-                      <div className="text-[#FF5733] font-bold">{entry.price.toFixed(2)} UNIT</div>
+                      <div className="text-[#FF5733] font-bold">{entry.price.toFixed(2)} USD</div>
                     </div>
                   ))}
                 </div>

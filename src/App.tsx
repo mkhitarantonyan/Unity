@@ -438,7 +438,7 @@ export default function App() {
               </span>
             </div>
             <div className="text-sm font-medium">
-              {hoveredUnit.owner_id ? `Owner: ${hoveredUnit.owner_id}` : `Price: ${hoveredUnit.sale_price.toFixed(2)} UNIT`}
+              {hoveredUnit.owner_id ? `Owner: ${hoveredUnit.owner_id}` : `Price: ${hoveredUnit.sale_price.toFixed(2)} USD`}
             </div>
             <div className="text-[10px] text-white mt-2 font-bold uppercase tracking-widest bg-white/5 p-1 text-center">
               Coordinates: X:{hoveredUnit.x} Y:{hoveredUnit.y}
