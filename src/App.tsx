@@ -512,11 +512,11 @@ useEffect(() => {
               </div>
 
               <div className="space-y-1">
-                <a href="mailto:support@unity-grid.com" className="flex items-center gap-3 p-2 text-gray-400 hover:text-white hover:bg-[#141414] transition-colors rounded-lg group">
+                <a href="https://mail.google.com/mail/?view=cm&fs=1&to=unitygrid.support@gmail.com" className="flex items-center gap-3 p-2 text-gray-400 hover:text-white hover:bg-[#141414] transition-colors rounded-lg group">
                   <Mail size={16} />
                   <span className="text-[10px] font-bold uppercase tracking-widest">Send Email</span>
                 </a>
-                <a href="https://t.me/your_telegram" target="_blank" rel="noreferrer" className="flex items-center gap-3 p-2 text-gray-400 hover:text-white hover:bg-[#141414] transition-colors rounded-lg group">
+                <a href="https://t.me/UnityGrid" target="_blank" rel="noreferrer" className="flex items-center gap-3 p-2 text-gray-400 hover:text-white hover:bg-[#141414] transition-colors rounded-lg group">
                   <Send size={16} />
                   <span className="text-[10px] font-bold uppercase tracking-widest">Telegram chat</span>
                 </a>

@@ -62,17 +62,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
 
   const [history, setHistory] = useState<any[]>([]);
+  const prevSelection = React.useRef<string>('');
 
   useEffect(() => {
-    if (selectedUnitIds.length === 1) {
-      fetch(`/api/unit/${selectedUnitIds[0]}/history`)
-        .then(res => res.json())
-        .then(data => setHistory(data))
-        .catch(() => setHistory([]));
-    } else {
-      setHistory([]);
+    const currentSelection = selectedUnitIds.join(',');
+    if (currentSelection !== prevSelection.current) {
+      prevSelection.current = currentSelection;
+
+      if (selectedUnitIds.length === 1) {
+        fetch(`/api/unit/${selectedUnitIds[0]}/history`)
+          .then(res => res.json())
+          .then(data => setHistory(data))
+          .catch(() => setHistory([]));
+
+        setPendingLink(selectedUnits[0]?.metadata?.link || '');
+        setPendingImage(null);
+      } else {
+        setHistory([]);
+        setPendingLink('');
+        setPendingImage(null);
+      }
     }
-  }, [selectedUnitIds]);
+  }, [selectedUnitIds, selectedUnits, setPendingLink, setPendingImage]);
 
   return (
     <AnimatePresence>
