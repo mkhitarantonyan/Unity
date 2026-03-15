@@ -180,6 +180,56 @@ useEffect(() => {
     }
   };
 
+  const handleClaimUnits = async (unitIds: number[]) => {
+    if (!user?.is_admin || unitIds.length === 0) return;
+
+    if (!pendingImage) {
+      toast.error('Please upload an image first');
+      return;
+    }
+
+    if (!window.confirm(`CLAIM: Are you sure you want to claim these ${unitIds.length} free units as Admin?`)) return;
+
+    // Высчитываем границы выделения, чтобы фото корректно растянулось
+    const currentSelected = units.filter(u => selectedUnitIds.includes(u.id));
+    const minX = Math.min(...currentSelected.map(u => u.x));
+    const minY = Math.min(...currentSelected.map(u => u.y));
+    const maxX = Math.max(...currentSelected.map(u => u.x));
+    const maxY = Math.max(...currentSelected.map(u => u.y));
+
+    try {
+      const res = await fetch('/api/admin/claim-unit', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getToken()}`
+        },
+        body: JSON.stringify({
+          unitIds,
+          metadata: { 
+            image_url: pendingImage, 
+            link: pendingLink,
+            is_for_sale: false, 
+            title: 'Claimed by Admin',
+            group: selectedUnitIds.length > 1 ? { minX, minY, maxX, maxY } : undefined
+          }
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        toast.success(`Захвачено пикселей: ${data.claimedCount || unitIds.length}`);
+        refresh();
+        setSelectedUnitIds([]);
+      } else {
+        const data = await res.json();
+        toast.error(data.error || 'Ошибка при массовом захвате');
+      }
+    } catch (e) {
+      toast.error('Ошибка сети при массовом захвате');
+    }
+  };
+
   const selectedUnits = units.filter(u => selectedUnitIds.includes(u.id));
   const totalPrice = selectedUnits.reduce((sum, u) => sum + u.sale_price, 0);
   const isOwner = user && selectedUnitIds.length > 0 && selectedUnits.every(u => u.owner_id === user.id);
@@ -579,6 +629,7 @@ useEffect(() => {
         }}
         handleModerateUnit={handleModerateUnit}
         handleResetUnits={handleResetUnits}
+        handleClaimUnits={handleClaimUnits}
         isMobile={isMobile}
         onCloseMobile={() => setIsMobileSidebarOpen(false)}
         />

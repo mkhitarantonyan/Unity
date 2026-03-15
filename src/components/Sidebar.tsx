@@ -28,6 +28,7 @@ interface SidebarProps {
   settings: any | null;
   handleModerateUnit?: (ids: number[]) => Promise<void>;
   handleResetUnits?: (ids: number[]) => Promise<void>;
+  handleClaimUnits?: (ids: number[]) => Promise<void>;
   isMobile: boolean;
   onCloseMobile: () => void;
 }
@@ -57,6 +58,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   settings,
   handleModerateUnit,
   handleResetUnits,
+  handleClaimUnits,
   isMobile,
   onCloseMobile,
 }) => {
@@ -240,24 +242,36 @@ export const Sidebar: React.FC<SidebarProps> = ({
             )}
 
             {/* ADMIN MODE */}
-            {user?.is_admin && selectedUnits.some(u => u.owner_id) && (
+            {user?.is_admin && (
               <section className="mt-4 p-4 border border-red-500/20 bg-red-500/5">
                 <h3 className="text-[10px] uppercase tracking-widest text-red-500 font-bold mb-3 flex items-center gap-2">
                   <Shield size={12} /> God Mode
                 </h3>
                 <div className="space-y-2">
-                  <button
-                    onClick={() => handleModerateUnit && handleModerateUnit(selectedUnitIds)}
-                    className="w-full bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-500 py-2 text-[9px] uppercase font-bold tracking-widest transition-colors flex items-center justify-center gap-2"
-                  >
-                    Clear Content <Trash2 size={12} />
-                  </button>
-                  <button
-                    onClick={() => handleResetUnits && handleResetUnits(selectedUnitIds)}
-                    className="w-full bg-red-600 hover:bg-red-700 text-white py-2 text-[9px] uppercase font-bold tracking-widest transition-colors flex items-center justify-center gap-2"
-                  >
-                    Confiscate <Lock size={12} />
-                  </button>
+                  {selectedUnits.some(u => u.owner_id) && (
+                    <>
+                      <button
+                        onClick={() => handleModerateUnit && handleModerateUnit(selectedUnitIds)}
+                        className="w-full bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-500 py-2 text-[9px] uppercase font-bold tracking-widest transition-colors flex items-center justify-center gap-2"
+                      >
+                        Clear Content <Trash2 size={12} />
+                      </button>
+                      <button
+                        onClick={() => handleResetUnits && handleResetUnits(selectedUnitIds)}
+                        className="w-full bg-red-600 hover:bg-red-700 text-white py-2 text-[9px] uppercase font-bold tracking-widest transition-colors flex items-center justify-center gap-2"
+                      >
+                        Confiscate <Lock size={12} />
+                      </button>
+                    </>
+                  )}
+                  {selectedUnits.some(u => !u.owner_id) && (
+                    <button
+                      onClick={() => handleClaimUnits && handleClaimUnits(selectedUnitIds.filter(id => !selectedUnits.find(u => u.id === id)?.owner_id))}
+                      className="w-full bg-emerald-600/20 hover:bg-emerald-600/40 border border-emerald-500/30 text-emerald-500 py-2 text-[9px] uppercase font-bold tracking-widest transition-colors flex items-center justify-center gap-2"
+                    >
+                      Claim Unowned <Shield size={12} />
+                    </button>
+                  )}
                 </div>
               </section>
             )}

@@ -750,10 +750,10 @@ app.post('/api/admin/toggle-prize', checkAdmin, (req, res) => {
   });
 
   app.post('/api/admin/claim-unit', checkAdmin, (req, res) => {
-    const { unitId, metadata } = req.body;
+    const { unitIds, metadata } = req.body;
 
-    if (unitId === undefined || !metadata) {
-      return res.status(400).json({ error: 'Missing unitId or metadata' });
+    if (!Array.isArray(unitIds) || unitIds.length === 0 || !metadata) {
+      return res.status(400).json({ error: 'Missing unitIds or metadata' });
     }
 
     const token = req.headers['authorization']?.split(' ')[1];
@@ -762,34 +762,47 @@ app.post('/api/admin/toggle-prize', checkAdmin, (req, res) => {
     if (!session) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
-    
+
     const adminId = session.user_id;
 
     try {
-      let updatedUnitData: any;
+      const updatedUnitsData: any[] = [];
+      
+      const placeholders = unitIds.map(() => '?').join(',');
+      const unitsToClaim = db.prepare(`SELECT id, x, y, owner_id, sale_price FROM units WHERE id IN (${placeholders})`).all(...unitIds) as any[];
 
-      db.transaction(() => {
-        const unit = db.prepare('SELECT x, y, sale_price FROM units WHERE id = ?').get(unitId) as any;
-        if (!unit) throw new Error('Unit not found');
-
-        db.prepare(
+      const claimTransaction = db.transaction(() => {
+        const updateUnitStmt = db.prepare(
           'UPDATE units SET owner_id = ?, current_price = sale_price, metadata = ? WHERE id = ?'
-        ).run(adminId, JSON.stringify(metadata), unitId);
+        );
+        const historyInsertStmt = db.prepare('INSERT INTO unit_history (unit_id, buyer_id, price) VALUES (?, ?, ?)');
+        
+        const stringifiedMetadata = JSON.stringify(metadata);
 
-        // Записываем в историю, чтобы это отображалось в Provenance
-        db.prepare('INSERT INTO unit_history (unit_id, buyer_id, price) VALUES (?, ?, ?)')
-          .run(unitId, adminId, unit.sale_price);
+        for (const unit of unitsToClaim) {
+          if (unit.owner_id) continue;
 
-        updatedUnitData = { id: unitId, x: unit.x, y: unit.y, owner_id: adminId, current_price: unit.sale_price, sale_price: unit.sale_price, metadata };
-      })();
+          updateUnitStmt.run(adminId, stringifiedMetadata, unit.id);
+          historyInsertStmt.run(unit.id, adminId, unit.sale_price);
 
-      cachedGridMap?.delete(unitId);
-      pendingGridUpdates.set(unitId, updatedUnitData);
+          updatedUnitsData.push({ 
+              id: unit.id, x: unit.x, y: unit.y, owner_id: adminId, 
+              current_price: unit.sale_price, sale_price: unit.sale_price, metadata 
+          });
+        }
+      });
 
-      res.json({ success: true });
+      claimTransaction();
+
+      updatedUnitsData.forEach(updatedUnit => {
+        cachedGridMap?.set(updatedUnit.id, updatedUnit);
+        pendingGridUpdates.set(updatedUnit.id, updatedUnit);
+      });
+
+      res.json({ success: true, claimedCount: updatedUnitsData.length });
     } catch (error: any) {
       console.error('Claim unit error:', error);
-      res.status(500).json({ error: error.message || 'Failed to claim unit' });
+      res.status(500).json({ error: error.message || 'Failed to claim units' });
     }
   });
 
