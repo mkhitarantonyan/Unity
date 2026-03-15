@@ -12,6 +12,7 @@ import { AuthModal } from './components/modals/AuthModal';
 import { ProfileModal } from './components/modals/ProfileModal';
 import { AdminPanel } from './components/modals/AdminPanel';
 import { LegalModal } from './components/modals/LegalModal';
+import { JackpotTracker } from './components/JackpotTracker';
 import { processImage } from './utils/image';
 import { 
   MousePointer2, BoxSelect, LogIn, LogOut, X, Shield, Users, 
@@ -20,6 +21,7 @@ import {
 } from 'lucide-react';
 import { useGrid, Unit } from './hooks/useGrid';
 import { getUser, initApp, logout, getToken } from './utils/auth';
+import { io } from 'socket.io-client';
 
 interface AppSettings {
   ui_title: string;
@@ -29,6 +31,9 @@ interface AppSettings {
   cloudinary_cloud_name: string;
   cloudinary_api_key: string;
   cloudinary_api_secret: string;
+  soldCount?: number;
+  secret_pixel_id?: string;
+  is_prize_active?: string;
 }
 
 export default function App() {
@@ -90,6 +95,38 @@ export default function App() {
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
 
   const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [winningPixelId, setWinningPixelId] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (settings?.is_prize_active === 'true' && settings?.secret_pixel_id) {
+      setWinningPixelId(Number(settings.secret_pixel_id));
+    } else {
+      setWinningPixelId(null);
+    }
+  }, [settings]);
+
+useEffect(() => {
+  const socket = io();
+
+  // Слушаем обновленное событие (оно должно называться так же, как в server.ts в io.emit)
+  socket.on('prize_status_update', (data: { pixelId: number | null, active: boolean }) => {
+    if (data.active) {
+      setWinningPixelId(data.pixelId);
+      toast.success("🏆 ГРИД ЗАПОЛНЕН! СЕКРЕТНЫЙ ПИКСЕЛЬ НАЙДЕН!", { duration: 10000 });
+      // Обновляем настройки в памяти, чтобы интерфейс знал о статусе
+      setSettings(prev => prev ? { ...prev, is_prize_active: 'true', secret_pixel_id: String(data.pixelId) } : prev);
+    } else {
+      // КЛЮЧЕВОЙ МОМЕНТ: если active: false, убираем ID и золото исчезает
+      setWinningPixelId(null);
+      setSettings(prev => prev ? { ...prev, is_prize_active: 'false' } : prev);
+    }
+  });
+
+  return () => {
+    socket.off('prize_status_update');
+    socket.disconnect();
+  };
+}, []);
 
   const handleModerateUnit = async (unitIds: number[]) => {
     if (!user?.is_admin || unitIds.length === 0) return;
@@ -396,6 +433,9 @@ export default function App() {
           )}
       </AnimatePresence>
 
+      {/* Jackpot Tracker */}
+      <JackpotTracker soldCount={units.length > 0 ? units.filter(u => u.owner_id).length : (settings?.soldCount || 0)} />
+
 {/* Main Canvas */}
       <div className="w-full h-full">
         <UnityCanvas 
@@ -410,6 +450,7 @@ export default function App() {
           onUnitHover={setHoveredUnit}
           onUnitsSelect={setSelectedUnitIds}
           onInteraction={() => setActiveMenu(null)}
+          winningPixelId={winningPixelId}
         />
       </div>
 

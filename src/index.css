@@ -54,3 +54,19 @@ html, body, #root {
   background: #262626;
   border-radius: 10px;
 }
+
+@keyframes goldPulse {
+  0% {
+    box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(255, 215, 0, 1), 0 0 40px rgba(255, 165, 0, 0.8);
+  }
+  100% {
+    box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+  }
+}
+.gold-pulse {
+  animation: goldPulse 2s infinite ease-in-out;
+}

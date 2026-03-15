@@ -610,6 +610,14 @@ try {
 app.get('/api/settings', (req, res) => {
     const settings = db.prepare("SELECT * FROM settings WHERE key NOT IN ('cloudinary_api_key', 'cloudinary_api_secret')").all();
     const settingsObj = (settings as any[]).reduce((acc, s) => ({ ...acc, [s.key]: s.value }), {});
+    
+    try {
+      const countRow = db.prepare('SELECT COUNT(*) as count FROM units WHERE owner_id IS NOT NULL').get() as { count: number };
+      settingsObj.soldCount = countRow.count;
+    } catch (e) {
+      settingsObj.soldCount = 0;
+    }
+    
     res.json(settingsObj);
 });
 
@@ -641,6 +649,29 @@ app.post('/api/admin/settings', checkAdmin, (req, res) => {
       res.status(500).json({ error: 'Failed to save settings' });
     }
   });
+
+app.post('/api/admin/toggle-prize', checkAdmin, (req, res) => {
+  const { pixelId, active } = req.body;
+  const update = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
+
+  try {
+    db.transaction(() => {
+      if (pixelId != null) update.run('secret_pixel_id', String(pixelId));
+      update.run('is_prize_active', active ? 'true' : 'false');
+    })();
+
+    // Отправляем сигнал ВСЕМ пользователям
+    // Если active === false, мы все равно шлем сигнал, чтобы у всех скрылся пиксель
+    io.emit('prize_status_update', { 
+      pixelId: active ? Number(pixelId) : null, 
+      active: !!active 
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to toggle prize' });
+  }
+});
 
   app.post('/api/admin/moderate-unit', checkAdmin, (req, res) => {
     const { unitIds } = req.body;

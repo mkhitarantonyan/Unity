@@ -15,6 +15,7 @@ interface UnityCanvasProps {
   onUnitHover: (unit: Unit | null) => void;
   onUnitsSelect?: (ids: number[]) => void;
   onInteraction?: () => void;
+  winningPixelId?: number | null;
 }
 
 const GRID_SIZE = 100;
@@ -25,7 +26,7 @@ const MAX_ZOOM = 10;
 
 export const UnityCanvas: React.FC<UnityCanvasProps> = ({ 
   units, selectedUnitIds, pendingImage, isSelectionMode, focusUnitId, viewportDataRef,
-  showGuides, onUnitClick, onUnitHover, onUnitsSelect, onInteraction 
+  showGuides, onUnitClick, onUnitHover, onUnitsSelect, onInteraction, winningPixelId
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
@@ -35,6 +36,7 @@ export const UnityCanvas: React.FC<UnityCanvasProps> = ({
   const selectionGraphicsRef = useRef<PIXI.Graphics | null>(null);
   const marqueeGraphicsRef = useRef<PIXI.Graphics | null>(null);
   const previewSpriteRef = useRef<PIXI.Sprite | null>(null);
+  const winningOverlayRef = useRef<HTMLDivElement>(null);
   
   const [isPixiReady, setIsPixiReady] = useState(false);
   const zoomTickerRef = useRef<((ticker: PIXI.Ticker) => void) | null>(null);
@@ -45,6 +47,8 @@ export const UnityCanvas: React.FC<UnityCanvasProps> = ({
   const isShiftDownRef = useRef(false);
   const isSelectionModeRef = useRef(!!isSelectionMode);
 
+  const winningPixelIdRef = useRef(winningPixelId);
+  useEffect(() => { winningPixelIdRef.current = winningPixelId; }, [winningPixelId]);
   useEffect(() => { isSelectionModeRef.current = !!isSelectionMode; }, [isSelectionMode]);
 
   const drawGrid = useCallback((g: PIXI.Graphics, guides: boolean) => {
@@ -254,6 +258,21 @@ export const UnityCanvas: React.FC<UnityCanvasProps> = ({
             const tl = vp.toLocal({ x: 0, y: 0 });
             const br = vp.toLocal({ x: app!.screen.width, y: app!.screen.height });
             viewportDataRef.current = { x: tl.x / UNIT_SIZE, y: tl.y / UNIT_SIZE, w: (br.x - tl.x) / UNIT_SIZE, h: (br.y - tl.y) / UNIT_SIZE };
+          }
+
+          if (winningPixelIdRef.current != null && winningOverlayRef.current && viewportRef.current) {
+            const wId = winningPixelIdRef.current;
+            const winningUnit = unitsRef.current[wId];
+            if (winningUnit) {
+              const worldX = winningUnit.x * UNIT_SIZE;
+              const worldY = winningUnit.y * UNIT_SIZE;
+              const screenPos = viewportRef.current.toGlobal({ x: worldX, y: worldY });
+              winningOverlayRef.current.style.display = 'block';
+              winningOverlayRef.current.style.transform = `translate(${screenPos.x}px, ${screenPos.y}px) scale(${viewportRef.current.scale.x})`;
+              winningOverlayRef.current.style.transformOrigin = 'top left';
+            } else { winningOverlayRef.current.style.display = 'none'; }
+          } else if (winningOverlayRef.current) {
+            winningOverlayRef.current.style.display = 'none';
           }
         });
 
@@ -500,6 +519,14 @@ export const UnityCanvas: React.FC<UnityCanvasProps> = ({
         className="absolute inset-0 cursor-crosshair overflow-hidden bg-[#0A0A0A] touch-none pointer-events-auto" 
         style={{ touchAction: 'none' }} 
       />
+      
+      <div 
+        ref={winningOverlayRef}
+        className="absolute pointer-events-none hidden z-20"
+        style={{ width: UNIT_SIZE, height: UNIT_SIZE }}
+      >
+        <div className="w-full h-full gold-pulse" style={{ background: 'linear-gradient(135deg, #FFD700, #FFA500)', border: '1px solid #FFF' }} />
+      </div>
 
       <div className="absolute right-4 top-[51%] flex flex-col gap-3 z-10 sm:hidden pointer-events-auto">
         <button 

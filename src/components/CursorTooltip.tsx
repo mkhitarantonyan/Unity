@@ -24,7 +24,7 @@ export const CursorTooltip: React.FC<CursorTooltipProps> = ({ selectedCount }) =
 
   return (
     <div
-      className="fixed pointer-events-none z- bg-black text-white px-3 py-1.5 text-[10px] font-mono uppercase border border-white/20 tracking-widest shadow-xl hidden sm:block"
+      className="fixed pointer-events-none z-50 bg-black text-white px-3 py-1.5 text-[10px] font-mono uppercase border border-white/20 tracking-widest shadow-xl hidden sm:block"
       style={{
         left: mousePos.x + 16,
         top: mousePos.y + 16,
