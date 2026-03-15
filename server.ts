@@ -16,8 +16,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const db = new Database('unity.db');
-// Ensure minimal price is 10.0 for all unowned units on startup
-db.prepare("UPDATE units SET sale_price = 10.0 WHERE owner_id IS NULL AND sale_price != 10.0").run();
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
@@ -80,6 +78,9 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 `);
+
+// Ensure minimal price is 10.0 for all unowned units on startup
+db.prepare("UPDATE units SET sale_price = 10.0 WHERE owner_id IS NULL AND sale_price != 10.0").run();
 
 let cachedGridMap: Map<number, any> | null = null;
 
