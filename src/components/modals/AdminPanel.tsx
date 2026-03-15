@@ -251,12 +251,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, user, s
                           >
                             {u.is_blocked ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
                           </button>
-                          <button 
-                            onClick={() => handleDeleteUser(u.id)}
-                            className="p-2 text-red-500 hover:bg-red-500/10 rounded-lg"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                         <button 
+                          onClick={() => handleDeleteUser(u.id)}
+                          disabled={u.id === user.id}
+                          className={`p-2 rounded-lg transition-colors ${
+                            u.id === user.id 
+                            ? 'opacity-20 cursor-not-allowed text-gray-500' 
+                            : 'text-red-500 hover:bg-red-500/10'
+                          }`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                         </td>
                       </tr>
                     ))}

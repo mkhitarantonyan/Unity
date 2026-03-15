@@ -607,6 +607,27 @@ try {
     res.json({ success: true });
   });
 
+app.post('/api/admin/delete-user', checkAdmin, (req, res) => {
+  const { userId } = req.body;
+
+  try {
+    const deleteTransaction = db.transaction(() => {
+      // Отвязываем пиксели
+      db.prepare('UPDATE units SET owner_id = NULL WHERE owner_id = ?').run(userId);
+      // Удаляем сессии юзера (иначе база заблокирует удаление)
+      db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
+      // Удаляем самого юзера
+      db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+    });
+    
+    deleteTransaction();
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Delete error:', error);
+    res.status(500).json({ error: 'Failed to delete user' });
+  }
+});
+  
 app.get('/api/settings', (req, res) => {
     const settings = db.prepare("SELECT * FROM settings WHERE key NOT IN ('cloudinary_api_key', 'cloudinary_api_secret')").all();
     const settingsObj = (settings as any[]).reduce((acc, s) => ({ ...acc, [s.key]: s.value }), {});
