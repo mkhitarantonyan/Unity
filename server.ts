@@ -16,9 +16,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const db = new Database('unity.db');
-// Temporary migration: ensure minimal price is 10.0 for all free units
-db.prepare("UPDATE units SET sale_price = 10.0 WHERE owner_id IS NULL AND sale_price < 10.0").run();
+// Ensure minimal price is 10.0 for all unowned units on startup
+db.prepare("UPDATE units SET sale_price = 10.0 WHERE owner_id IS NULL AND sale_price != 10.0").run();
 db.pragma('journal_mode = WAL');
+db.pragma('foreign_keys = ON');
 
 // Initialize database
 db.exec(`
@@ -55,7 +56,7 @@ db.exec(`
 
   CREATE TABLE IF NOT EXISTS transactions (
     id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
+    user_id TEXT,
     amount REAL NOT NULL,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
   );
@@ -63,7 +64,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS unit_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     unit_id INTEGER NOT NULL,
-    buyer_id TEXT NOT NULL,
+    buyer_id TEXT,
     price REAL NOT NULL,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(unit_id) REFERENCES units(id),
@@ -71,7 +72,7 @@ db.exec(`
   );
   CREATE TABLE IF NOT EXISTS orders (
     order_id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
+    user_id TEXT,
     unit_ids TEXT NOT NULL,
     amount REAL NOT NULL,
     metadata TEXT,
@@ -135,8 +136,6 @@ function updateCacheForUnits(units: any[], owner: string, finalNext: number, met
     }
   });
 }
-
-db.prepare('UPDATE units SET sale_price = 10.0 WHERE owner_id IS NULL AND sale_price != 10.0').run();
 
 const count = db.prepare('SELECT COUNT(*) as count FROM units').get() as { count: number };
 if (count.count === 0) {
@@ -610,17 +609,36 @@ try {
 app.post('/api/admin/delete-user', checkAdmin, (req, res) => {
   const { userId } = req.body;
 
+  if (!userId || typeof userId !== 'string') {
+    return res.status(400).json({ error: 'Invalid user ID' });
+  }
+
   try {
+    // 1. Получаем все юниты пользователя до удаления, чтобы потом обновить кэш
+    const userUnits = db.prepare('SELECT id FROM units WHERE owner_id = ?').all(userId) as { id: number }[];
+
     const deleteTransaction = db.transaction(() => {
-      // Отвязываем пиксели
-      db.prepare('UPDATE units SET owner_id = NULL WHERE owner_id = ?').run(userId);
-      // Удаляем сессии юзера (иначе база заблокирует удаление)
+      // Сбрасываем пиксели пользователя
+      db.prepare("UPDATE units SET owner_id = NULL, current_price = 0, sale_price = 10.0, metadata = '{}' WHERE owner_id = ?").run(userId);
+      
+      // Анонимизируем историю (сохраняем транзакции для финансовой отчетности)
+      db.prepare('UPDATE transactions SET user_id = NULL WHERE user_id = ?').run(userId);
+      db.prepare('UPDATE orders SET user_id = NULL WHERE user_id = ?').run(userId);
+      db.prepare('UPDATE unit_history SET buyer_id = NULL WHERE buyer_id = ?').run(userId);
+
+      // Удаляем сессии и саму учетную запись пользователя
       db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
-      // Удаляем самого юзера
       db.prepare('DELETE FROM users WHERE id = ?').run(userId);
     });
     
     deleteTransaction();
+
+    // 2. Очищаем RAM-кэш сервера и рассылаем сокеты всем онлайн-игрокам
+    userUnits.forEach(u => {
+      cachedGridMap?.delete(u.id);
+      pendingGridUpdates.set(u.id, { id: u.id, owner_id: null, current_price: 0, sale_price: 10.0, metadata: {} });
+    });
+
     res.json({ success: true });
   } catch (error) {
     console.error('Delete error:', error);
