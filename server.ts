@@ -749,6 +749,50 @@ app.post('/api/admin/toggle-prize', checkAdmin, (req, res) => {
     res.json({ success: true });
   });
 
+  app.post('/api/admin/claim-unit', checkAdmin, (req, res) => {
+    const { unitId, metadata } = req.body;
+
+    if (unitId === undefined || !metadata) {
+      return res.status(400).json({ error: 'Missing unitId or metadata' });
+    }
+
+    const token = req.headers['authorization']?.split(' ')[1];
+    const session = db.prepare("SELECT user_id FROM sessions WHERE token = ?").get(token) as { user_id: string } | undefined;
+    
+    if (!session) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    
+    const adminId = session.user_id;
+
+    try {
+      let updatedUnitData: any;
+
+      db.transaction(() => {
+        const unit = db.prepare('SELECT x, y, sale_price FROM units WHERE id = ?').get(unitId) as any;
+        if (!unit) throw new Error('Unit not found');
+
+        db.prepare(
+          'UPDATE units SET owner_id = ?, current_price = sale_price, metadata = ? WHERE id = ?'
+        ).run(adminId, JSON.stringify(metadata), unitId);
+
+        // Записываем в историю, чтобы это отображалось в Provenance
+        db.prepare('INSERT INTO unit_history (unit_id, buyer_id, price) VALUES (?, ?, ?)')
+          .run(unitId, adminId, unit.sale_price);
+
+        updatedUnitData = { id: unitId, x: unit.x, y: unit.y, owner_id: adminId, current_price: unit.sale_price, sale_price: unit.sale_price, metadata };
+      })();
+
+      cachedGridMap?.delete(unitId);
+      pendingGridUpdates.set(unitId, updatedUnitData);
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Claim unit error:', error);
+      res.status(500).json({ error: error.message || 'Failed to claim unit' });
+    }
+  });
+
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({ server: { middlewareMode: true }, appType: 'spa' });
     app.use(vite.middlewares);
