@@ -10,7 +10,7 @@ interface MinimapProps {
 
 export const Minimap: React.FC<MinimapProps> = ({ units, viewportDataRef, onNavigate }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null)
   
   // По умолчанию свернуто
   const [isMinimized, setIsMinimized] = useState(true);
