@@ -7,10 +7,7 @@ export const JackpotTracker: React.FC<JackpotTrackerProps> = ({ soldCount }) => 
       <div className="flex flex-col items-start mb-2">
         <div className="flex flex-col">
            {/* ИЗМЕНЕНО: Более понятный заголовок */}
-           <span className="text-[8px] text-[#FF5733] uppercase tracking-[0.2em] font-black mb-0.5">Secret Pixel Draw</span>
-           <span className="text-white font-black italic text-xl tracking-tighter drop-shadow-[0_0_8px_rgba(255,87,51,0.3)]">
-            $5,000.00
-          </span>
+           <span className="text-[8px] text-[#FF5733] uppercase tracking-[0.2em] font-black mb-0.5">Building a legacy, pixel by pixel. 10% for charity</span>
         </div>
       </div>
 
@@ -29,9 +26,6 @@ export const JackpotTracker: React.FC<JackpotTrackerProps> = ({ soldCount }) => 
               {soldCount.toLocaleString()} / 10k sold
             </span>
           </div>
-          <p className="text-[7px] text-gray-400 leading-tight uppercase tracking-tighter">
-            One random unit owner wins <br/> when the grid is 100% full.
-          </p>
         </div>
       </div>
     </div>
