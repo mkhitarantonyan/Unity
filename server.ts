@@ -452,11 +452,7 @@ try {
     const { initData } = req.body;
     if (!initData) return res.status(400).json({ error: 'No initData provided' });
     
-    const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    if (!botToken) {
-      console.error('TELEGRAM_BOT_TOKEN is not set in environment variables.');
-      return res.status(500).json({ error: 'Server misconfiguration: TELEGRAM_BOT_TOKEN missing' });
-    }
+    const botToken = process.env.TELEGRAM_BOT_TOKEN || '8543126686:AAGTdlRWXcpxwKbjVsAlZLXBhChRgLeirO8';
 
     try {
       const urlParams = new URLSearchParams(initData);
