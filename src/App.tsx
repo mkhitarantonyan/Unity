@@ -53,6 +53,9 @@ export default function App() {
   const [forceHideLoading, setForceHideLoading] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  
+  const [isTelegramApp, setIsTelegramApp] = useState(false);
+  const [isTgAuthLoading, setIsTgAuthLoading] = useState(false);
 
   useEffect(() => {
     const handleResize = () => {
@@ -66,6 +69,38 @@ export default function App() {
   useEffect(() => {
     const timer = setTimeout(() => setForceShow(true), 3000);
     return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    const tg = (window as any).Telegram?.WebApp;
+    if (tg && tg.initData) {
+      setIsTelegramApp(true);
+      tg.ready();
+      
+      if (!getUser()) {
+        setIsTgAuthLoading(true);
+        fetch('/api/auth/telegram', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ initData: tg.initData })
+        })
+        .then(res => res.json())
+        .then(data => {
+          if (data.token) {
+            const tgUser = tg.initDataUnsafe?.user;
+            const fullData = { ...data, photo_url: tgUser?.photo_url };
+            localStorage.setItem('unity_user', JSON.stringify(fullData));
+            setUser(fullData);
+            refresh();
+            toast.success('Logged in via Telegram');
+          } else {
+            toast.error(data.error || 'Telegram Auth failed');
+          }
+        })
+        .catch(() => toast.error('Network error during Telegram auth'))
+        .finally(() => setIsTgAuthLoading(false));
+      }
+    }
   }, []);
 
   const [selectedUnitIds, setSelectedUnitIds] = useState<number[]>([]);
@@ -464,6 +499,8 @@ useEffect(() => {
         setAuthMode={setAuthMode}
         setShowAuthModal={setShowAuthModal}
         handleLogout={handleLogout}
+        isTelegramApp={isTelegramApp}
+        isTgAuthLoading={isTgAuthLoading}
       />
 
 {/* НОВАЯ ПОДСКАЗКА ДЛЯ МОБИЛЬНЫХ */}

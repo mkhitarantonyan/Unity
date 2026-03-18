@@ -27,7 +27,8 @@ db.exec(`
     password TEXT NOT NULL,
     first_name TEXT NOT NULL,
     is_admin INTEGER DEFAULT 0,
-    is_blocked INTEGER DEFAULT 0
+    is_blocked INTEGER DEFAULT 0,
+    telegram_id TEXT UNIQUE
   );
 
   CREATE TABLE IF NOT EXISTS sessions (
@@ -81,6 +82,13 @@ db.exec(`
 
 // Ensure minimal price is 10.0 for all unowned units on startup
 db.prepare("UPDATE units SET sale_price = 10.0 WHERE owner_id IS NULL AND sale_price != 10.0").run();
+
+try {
+  db.prepare('ALTER TABLE users ADD COLUMN telegram_id TEXT').run();
+  db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id)').run();
+} catch (e) {
+  // Ignore errors if column already exists
+}
 
 let cachedGridMap: Map<number, any> | null = null;
 
@@ -438,6 +446,70 @@ try {
       }
     }
     res.json({ success: true });
+  });
+
+  app.post('/api/auth/telegram', authLimiter, (req, res) => {
+    const { initData } = req.body;
+    if (!initData) return res.status(400).json({ error: 'No initData provided' });
+    
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    if (!botToken) {
+      console.error('TELEGRAM_BOT_TOKEN is not set in environment variables.');
+      return res.status(500).json({ error: 'Server misconfiguration: TELEGRAM_BOT_TOKEN missing' });
+    }
+
+    try {
+      const urlParams = new URLSearchParams(initData);
+      const hash = urlParams.get('hash');
+      if (!hash) return res.status(400).json({ error: 'Invalid initData' });
+      
+      urlParams.delete('hash');
+      const keys = Array.from(urlParams.keys()).sort();
+      const dataCheckString = keys.map(key => `${key}=${urlParams.get(key)}`).join('\n');
+      
+      const secretKey = crypto.createHmac('sha256', 'WebAppData').update(botToken).digest();
+      const calculatedHash = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
+      
+      if (calculatedHash !== hash) {
+        return res.status(403).json({ error: 'Data validation failed' });
+      }
+
+      const userStr = urlParams.get('user');
+      if (!userStr) return res.status(400).json({ error: 'No user data found in initData' });
+      const tgUser = JSON.parse(userStr);
+
+      let user = db.prepare('SELECT * FROM users WHERE telegram_id = ?').get(String(tgUser.id)) as any;
+      
+      if (!user) {
+        const id = crypto.randomUUID();
+        let username = tgUser.username || `tg_${tgUser.id}`;
+        
+        const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+        if (existing) username = `tg_${tgUser.id}`;
+
+        const firstName = tgUser.first_name || username;
+        const randomPassword = crypto.randomBytes(32).toString('hex');
+        const hashedPassword = bcrypt.hashSync(randomPassword, 10);
+        
+        const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number };
+        const isAdmin = userCount.count === 0 ? 1 : 0;
+
+        db.prepare('INSERT INTO users (id, username, password, first_name, is_admin, telegram_id) VALUES (?, ?, ?, ?, ?, ?)')
+          .run(id, username, hashedPassword, firstName, isAdmin, String(tgUser.id));
+          
+        user = { id, username, first_name: firstName, is_admin: isAdmin, is_blocked: 0 };
+      }
+      
+      if (user.is_blocked) return res.status(403).json({ error: 'Your account is blocked' });
+      
+      const token = crypto.randomBytes(32).toString('hex');
+      db.prepare('INSERT INTO sessions (token, user_id) VALUES (?, ?)').run(token, user.id);
+      
+      res.json({ token, id: user.id, username: user.username, first_name: user.first_name, is_admin: user.is_admin === 1 });
+    } catch (error) {
+      console.error('Telegram auth error:', error);
+      res.status(500).json({ error: 'Telegram authentication failed' });
+    }
   });
 
   app.get('/api/grid', (req, res) => {

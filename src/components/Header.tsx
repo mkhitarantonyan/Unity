@@ -13,6 +13,8 @@ interface HeaderProps {
   setAuthMode: (mode: 'login' | 'register') => void;
   setShowAuthModal: (show: boolean) => void;
   handleLogout: () => void;
+  isTelegramApp?: boolean;
+  isTgAuthLoading?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -26,7 +28,9 @@ export const Header: React.FC<HeaderProps> = ({
   setShowAdminPanel,
   setAuthMode,
   setShowAuthModal,
-  handleLogout
+  handleLogout,
+  isTelegramApp,
+  isTgAuthLoading
 }) => {
   return (
     <header className="absolute top-0 left-0 w-full p-4 sm:p-6 z-20 flex justify-between items-start pointer-events-none">
@@ -69,6 +73,9 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={() => setShowProfileModal(true)}
               className="bg-[#141414]/80 hover:bg-[#262626] backdrop-blur-md border border-[#262626] px-4 text-[10px] uppercase tracking-widest font-bold transition-colors flex items-center gap-2 h-10"
             >
+              {user.photo_url && (
+                <img src={user.photo_url} alt="Avatar" className="w-5 h-5 rounded-full object-cover border border-white/20" />
+              )}
               <span>{user.first_name}</span>
               <span className="text-[#FF5733] ml-2 border-l border-[#262626] pl-2">{myUnitsCount} Units</span>
             </button>
@@ -91,6 +98,13 @@ export const Header: React.FC<HeaderProps> = ({
               <LogOut size={14} />
             </button>
           </div>
+        ) : isTelegramApp ? (
+          <button 
+            disabled
+            className="bg-[#262626] text-gray-400 px-6 h-10 text-[8px] sm:text-[10px] uppercase tracking-widest font-bold flex items-center justify-center"
+          >
+            {isTgAuthLoading ? 'Authenticating...' : 'Loading'}
+          </button>
         ) : (
           <button 
             onClick={() => { setAuthMode('login'); setShowAuthModal(true); }}
