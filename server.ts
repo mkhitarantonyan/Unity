@@ -874,13 +874,15 @@ app.post('/api/admin/toggle-prize', checkAdmin, (req, res) => {
     }
   });
 
-  if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({ server: { middlewareMode: true }, appType: 'spa' });
-    app.use(vite.middlewares);
-  } else {
-    app.use(express.static('dist'));
-    app.get('*', (req, res) => res.sendFile(path.resolve(__dirname, 'dist', 'index.html')));
-  }
+  // Мы просто выкидываем проверку и заставляем сервер работать с папкой dist
+app.use(express.static(path.join(process.cwd(), 'dist')));
+
+app.get('*', (req, res) => {
+const PORT = 3000;
+httpServer.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 UNITY Server running on port ${PORT}`);
+  console.log(`🤖 Бот должен ожить прямо сейчас!`);
+});
 
   const PORT = 3000;
   httpServer.listen(PORT, '0.0.0.0', () => console.log(`UNITY Server running on port ${PORT} with WebSockets`));
