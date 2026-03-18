@@ -874,18 +874,18 @@ app.post('/api/admin/toggle-prize', checkAdmin, (req, res) => {
     }
   });
 
-  // Мы просто выкидываем проверку и заставляем сервер работать с папкой dist
 app.use(express.static(path.join(process.cwd(), 'dist')));
 
-app.get('*', (req, res) => {
-const PORT = 3000;
-httpServer.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 UNITY Server running on port ${PORT}`);
-  console.log(`🤖 Бот должен ожить прямо сейчас!`);
-});
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(process.cwd(), 'dist', 'index.html'));
+  });
 
-  const PORT = 3000;
-  httpServer.listen(PORT, '0.0.0.0', () => console.log(`UNITY Server running on port ${PORT} with WebSockets`));
-}
+  // Запуск сервера (убедись, что выше НЕТ другого const PORT)
+  const PORT_VAL = 3000; 
+  httpServer.listen(PORT_VAL, '0.0.0.0', () => {
+    console.log(`🚀 UNITY Server running on port ${PORT_VAL}`);
+    console.log(`🤖 Бот готов! Жми /start в телеграме.`);
+  });
+} // <--- Эта скобка закрывает функцию startServer
 
 startServer();
