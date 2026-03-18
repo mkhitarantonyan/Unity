@@ -11,6 +11,7 @@ import axios from 'axios';
 import { v2 as cloudinary } from 'cloudinary';
 import bcrypt from 'bcryptjs';
 import rateLimit from 'express-rate-limit'; 
+import TelegramBot from 'node-telegram-bot-api';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
