@@ -241,6 +241,41 @@ const checkAdmin = (req: express.Request, res: express.Response, next: express.N
 };
 
 async function startServer() {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  
+  if (!token) {
+    console.log("❌ ОШИБКА: Токен бота не найден в .env!");
+  } else {
+    const bot = new TelegramBot(token, { polling: true });
+
+    bot.on('message', (msg) => {
+      console.log(`📥 Кто-то написал боту: "${msg.text}" от @${msg.from?.username}`);
+    });
+
+    // Обработка команды /start
+bot.onText(/\/start/, (msg) => {
+      const chatId = msg.chat.id;
+      const webAppUrl = process.env.APP_URL || 'https://grid-unity.com';
+
+      console.log(`📩 Получена команда /start от @${msg.from?.username}`);
+
+      bot.sendMessage(chatId, "Привет, Мхитар! Твоя UNITY-сеть готова к работе. Нажми кнопку ниже, чтобы зайти в игру! 🚀", {
+        reply_markup: {
+          inline_keyboard: [
+            [
+              {
+                text: "🚀 ОТКРЫТЬ UNITY GRID",
+                web_app: { url: webAppUrl } // ЭТА КНОПКА ОТКРОЕТ САЙТ ПРЯМО В ТГ
+              }
+            ]
+          ]
+        }
+      });
+    });
+
+    // Обработка ошибок бота
+    bot.on("polling_error", (err) => console.log("Ошибка бота:", err.message));
+  }
   const app = express();
   
   const httpServer = createHttpServer(app);
