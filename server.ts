@@ -401,7 +401,7 @@ bot.onText(/\/start/, (msg) => {
       const result = await cloud.uploader.upload(image, { 
         folder: 'unity_grid',
         transformation: [
-          { width: 100, height: 100, crop: "fill", gravity: "auto" },
+          { width: 100, height: 100, crop: "fit" },
           { quality: "auto", fetch_format: "auto" }
         ]
       });
