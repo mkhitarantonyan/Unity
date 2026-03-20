@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, BoxSelect, Image as ImageIcon } from 'lucide-react';
+import { X, BoxSelect, Image as ImageIcon, Wallet } from 'lucide-react';
 import { Unit } from '../../hooks/useGrid';
+import { getToken } from '../../utils/auth';
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -20,6 +21,22 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   setSelectedUnitIds, 
   setFocusUnitId 
 }) => {
+  const [balance, setBalance] = useState<number>(0);
+
+  useEffect(() => {
+    if (isOpen) {
+      const token = getToken();
+      if (token) {
+        fetch('/api/user/balance', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+        .then(res => res.json())
+        .then(data => setBalance(data.balance || 0))
+        .catch(() => setBalance(0));
+      }
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   return (
@@ -43,14 +60,20 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           </div>
 
           <div className="p-8 flex-1 overflow-y-auto space-y-6 custom-scrollbar">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
               <div className="bg-[#141414] p-6 rounded-2xl border border-[#262626]">
                 <div className="text-3xl font-bold text-white">{myUnits.length}</div>
                 <div className="text-gray-500 text-[10px] uppercase tracking-widest mt-1">Owned Units</div>
               </div>
               <div className="bg-[#141414] p-6 rounded-2xl border border-[#262626]">
                 <div className="text-3xl font-bold text-[#FF5733]">{myTotalValue.toFixed(2)}</div>
-                <div className="text-gray-500 text-[10px] uppercase tracking-widest mt-1">Total Value (UNIT)</div>
+                <div className="text-gray-500 text-[10px] uppercase tracking-widest mt-1">Total Value (USD)</div>
+              </div>
+              <div className="bg-[#141414] p-6 rounded-2xl border border-[#262626] col-span-2 sm:col-span-1">
+                <div className="text-3xl font-bold text-emerald-500">{balance.toFixed(2)}</div>
+                <div className="text-gray-500 text-[10px] uppercase tracking-widest mt-1 flex items-center gap-1">
+                  <Wallet size={12} /> Balance (USDT)
+                </div>
               </div>
             </div>
 

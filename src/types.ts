@@ -1,3 +1,14 @@
+export interface User {
+  id: string;
+  username: string;
+  first_name: string;
+  is_admin: boolean;
+  is_blocked?: boolean;
+  telegram_id?: string;
+  balance?: number;
+  photo_url?: string;
+}
+
 export interface UnitMetadata {
   title?: string;
   image_url?: string;

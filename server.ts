@@ -30,7 +30,8 @@ db.exec(`
     first_name TEXT NOT NULL,
     is_admin INTEGER DEFAULT 0,
     is_blocked INTEGER DEFAULT 0,
-    telegram_id TEXT UNIQUE
+    telegram_id TEXT UNIQUE,
+    balance REAL DEFAULT 0
   );
 
   CREATE TABLE IF NOT EXISTS sessions (
@@ -88,6 +89,12 @@ db.prepare("UPDATE units SET sale_price = 10.0 WHERE owner_id IS NULL AND sale_p
 try {
   db.prepare('ALTER TABLE users ADD COLUMN telegram_id TEXT').run();
   db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id)').run();
+} catch (e) {
+  // Ignore errors if column already exists
+}
+
+try {
+  db.prepare('ALTER TABLE users ADD COLUMN balance REAL DEFAULT 0').run();
 } catch (e) {
   // Ignore errors if column already exists
 }
@@ -243,11 +250,12 @@ const checkAdmin = (req: express.Request, res: express.Response, next: express.N
 
 async function startServer() {
   const token = process.env.TELEGRAM_BOT_TOKEN;
+  let bot: TelegramBot | null = null;
   
   if (!token) {
     console.log("❌ ОШИБКА: Токен бота не найден в .env!");
   } else {
-    const bot = new TelegramBot(token, { polling: true });
+    bot = new TelegramBot(token, { polling: true });
 
     bot.on('message', (msg) => {
       console.log(`📥 Кто-то написал боту: "${msg.text}" от @${msg.from?.username}`);
@@ -276,6 +284,10 @@ bot.onText(/\/start/, (msg) => {
 
     // Обработка ошибок бота
     bot.on("polling_error", (err) => console.log("Ошибка бота:", err.message));
+
+    // Мягкое отключение бота при остановке сервера (помогает при авто-перезагрузке)
+    process.once('SIGINT', () => bot?.stopPolling());
+    process.once('SIGTERM', () => bot?.stopPolling());
   }
   const app = express();
   
@@ -345,7 +357,28 @@ bot.onText(/\/start/, (msg) => {
           const maxNext = unit.sale_price * 2.0;
           const finalNext = Math.max(minNext, Math.min(maxNext, meta.nextSalePrice ?? minNext));
           appliedNextPrice = finalNext;
-          update.run(order.user_id, finalNext, JSON.stringify(meta), unit.id);
+          
+          // Начисление средств на баланс предыдущего владельца (-10% комиссия системы)
+          const prevOwnerId = unit.owner_id;
+          if (prevOwnerId && prevOwnerId !== order.user_id) {
+            const amountToCredit = unit.sale_price * 0.9; 
+            db.prepare('UPDATE users SET balance = balance + ? WHERE id = ?').run(amountToCredit, prevOwnerId);
+            
+            const prevOwner = db.prepare('SELECT telegram_id FROM users WHERE id = ?').get(prevOwnerId) as any;
+            if (prevOwner && prevOwner.telegram_id && bot) {
+              bot.sendMessage(
+                prevOwner.telegram_id, 
+                `🎉 Ваш юнит #${unit.id} был куплен за ${unit.sale_price} USDT! На ваш баланс зачислено ${amountToCredit.toFixed(2)} USDT.`
+              ).catch(e => console.error('Telegram bot error:', e));
+            }
+          }
+          
+          const unitMetadata = {
+            ...meta,
+            is_for_sale: meta.is_for_sale ?? true
+          };
+          
+          update.run(order.user_id, finalNext, JSON.stringify(unitMetadata), unit.id);
           historyInsert.run(unit.id, order.user_id, unit.sale_price);
         }
         db.prepare('INSERT INTO transactions (id, user_id, amount) VALUES (?, ?, ?)').run(crypto.randomUUID(), order.user_id, order.amount);
@@ -543,6 +576,19 @@ try {
       console.error('Telegram auth error:', error);
       res.status(500).json({ error: 'Telegram authentication failed' });
     }
+  });
+
+  app.get('/api/user/balance', (req, res) => {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader || !authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+    
+    const token = authHeader.split(' ')[1];
+    const session = db.prepare("SELECT user_id FROM sessions WHERE token = ? AND datetime(created_at, '+24 hours') > datetime('now')").get(token) as { user_id: string } | undefined;
+    
+    if (!session) return res.status(401).json({ error: 'Invalid or expired token' });
+    
+    const user = db.prepare('SELECT balance FROM users WHERE id = ?').get(session.user_id) as { balance: number };
+    res.json({ balance: user?.balance || 0 });
   });
 
   app.get('/api/grid', (req, res) => {
