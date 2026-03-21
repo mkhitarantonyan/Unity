@@ -268,7 +268,10 @@ useEffect(() => {
   const selectedUnits = units.filter(u => selectedUnitIds.includes(u.id));
   const totalPrice = selectedUnits.reduce((sum, u) => sum + u.sale_price, 0);
   const isOwner = user && selectedUnitIds.length > 0 && selectedUnits.every(u => u.owner_id === user.id);
-  const canBuy = selectedUnits.every(u => !u.owner_id || (u.owner_id !== user?.id && u.metadata?.is_for_sale !== false && u.metadata?.is_for_sale !== 'false'));
+  const canBuy = selectedUnits.every(u => {
+    const saleFlag = u.metadata?.is_for_sale;
+    return !u.owner_id || (u.owner_id !== user?.id && saleFlag !== false && String(saleFlag) !== 'false');
+  });
 
   useEffect(() => {
     if (selectedUnitIds.length === 0) {
@@ -284,7 +287,8 @@ useEffect(() => {
       if (user && selectedUnitIds.length === 1 && currentSelected.length === 1 && currentSelected[0]?.owner_id === user.id) {
         const selectedUnit = currentSelected[0];
         setPendingLink(selectedUnit?.metadata?.link ?? '');
-        setIsForSale(!!selectedUnit?.metadata?.is_for_sale);
+        const currentIsForSale = selectedUnit?.metadata?.is_for_sale;
+        setIsForSale(currentIsForSale === undefined ? true : String(currentIsForSale) === 'true');
       } else {
         setIsForSale(false);
       }
@@ -370,6 +374,11 @@ useEffect(() => {
     const maxY = Math.max(...selectedUnits.map(u => u.y));
 
     try {
+      const existingImage =
+        selectedUnitIds.length === 1
+          ? selectedUnits[0]?.metadata?.image_url
+          : undefined;
+
       const response = await fetch('/api/update-price', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(getToken() && { Authorization: `Bearer ${getToken()}` }) },
@@ -378,13 +387,17 @@ useEffect(() => {
           ownerId: user.id,
           nextSalePrice: resalePrice,
           token: getToken(),
-          metadata: pendingImage || pendingLink ? {
+          metadata: {
             title: `Owned by ${user.first_name}`,
             link: pendingLink,
-            image_url: pendingImage || selectedUnits[0]?.metadata?.image_url || '',
             is_for_sale: isForSale,
+            ...(pendingImage
+              ? { image_url: pendingImage }
+              : existingImage
+                ? { image_url: existingImage }
+                : {}),
             group: selectedUnitIds.length > 1 ? { minX, minY, maxX, maxY } : undefined
-          } : undefined
+          }
         })
       });
 
