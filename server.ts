@@ -250,11 +250,13 @@ const checkAdmin = (req: express.Request, res: express.Response, next: express.N
 
 async function startServer() {
   const token = process.env.TELEGRAM_BOT_TOKEN;
+  // ШАГ 1: Объявляем переменную здесь (на уровне всей функции)
   let bot: TelegramBot | null = null;
   
   if (!token) {
     console.log("❌ ОШИБКА: Токен бота не найден в .env!");
   } else {
+    // ШАГ 2: УБИРАЕМ слово 'const' перед bot, чтобы использовать внешнюю переменную
     bot = new TelegramBot(token, { polling: true });
 
     bot.on('message', (msg) => {
@@ -290,6 +292,7 @@ bot.onText(/\/start/, (msg) => {
     process.once('SIGTERM', () => bot?.stopPolling());
   }
   const app = express();
+  // Теперь во всех эндпоинтах ниже переменная bot будет доступна!
   
   const httpServer = createHttpServer(app);
   const io = new SocketIOServer(httpServer, {
@@ -599,46 +602,77 @@ try {
       res.status(500).json({ error: 'Failed to fetch grid' });
     }
   });
-  app.post('/api/update-price', (req, res) => {
-    const result = UpdatePriceSchema.safeParse(req.body);
-    if (!result.success) return res.status(400).json({ error: result.error.message });
-    const { unitIds, ownerId, nextSalePrice, metadata, token } = result.data;
-    if (!validateAuth(token)) return res.status(401).json({ error: 'Invalid or expired token' });
+app.post('/api/update-price', (req, res) => {
+  const result = UpdatePriceSchema.safeParse(req.body);
+  if (!result.success) return res.status(400).json({ error: result.error.message });
+  
+  const { unitIds, ownerId, nextSalePrice, metadata, token } = result.data;
 
-    try {
-      const placeholders = unitIds.map(() => '?').join(',');
-      const units = db.prepare(`SELECT * FROM units WHERE id IN (${placeholders})`).all(...unitIds) as any[];
-      
-      if (!units.every(u => u.owner_id === ownerId)) {
-        return res.status(403).json({ error: 'Ownership verification failed' });
-      }
+  try {
+    // 1. УЗНАЕМ РЕАЛЬНЫЙ ID ПОЛЬЗОВАТЕЛЯ ПО ТОКЕНУ
+    const session = db.prepare(
+      "SELECT user_id FROM sessions WHERE token = ? AND datetime(created_at, '+24 hours') > datetime('now')"
+    ).get(token.trim()) as { user_id: string } | undefined;
 
-      const update = db.prepare(`UPDATE units SET sale_price = ?, metadata = COALESCE(?, metadata) WHERE id = ?`);
-      let appliedNextPrice = 1.0;
+    if (!session) return res.status(401).json({ error: 'Invalid or expired token' });
+    
+    // РЕАЛЬНЫЙ ID ИЗ БАЗЫ
+    const realUserId = session.user_id;
 
-      const updateMany = db.transaction((nextPrice: number, meta: string | null) => {
-        for (const unit of units) {
-          const minNext = (unit.current_price || 10.0) * 1.2;
-          const maxNext = (unit.current_price || 10.0) * 2.0;
-          const finalNext = Math.max(minNext, Math.min(maxNext, nextPrice));
-          appliedNextPrice = finalNext; 
-          update.run(finalNext, meta, unit.id);
-        }
-      });
-
-      updateMany(nextSalePrice, metadata ? JSON.stringify(metadata) : null);
-      updateCacheForUnits(units, ownerId, appliedNextPrice, metadata); 
-      
-      unitIds.forEach(id => {
-        const u = cachedGridMap!.get(id);
-        if (u) pendingGridUpdates.set(id, u);
-      });
-
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: 'Update failed' });
+    const placeholders = unitIds.map(() => '?').join(',');
+    const units = db.prepare(`SELECT * FROM units WHERE id IN (${placeholders})`).all(...unitIds) as any[];
+    
+    // 2. ПРОВЕРЯЕМ: ПРИНАДЛЕЖАТ ЛИ ПИКСЕЛИ ИМЕННО ЭТОМУ ПОЛЬЗОВАТЕЛЮ
+    if (!units.every(u => u.owner_id === realUserId)) {
+      console.log(`🚨 Попытка взлома! Пользователь ${realUserId} пытался изменить чужие пиксели.`);
+      return res.status(403).json({ error: 'You do not own these units' });
     }
-  });
+
+    const updateStmt = db.prepare(`UPDATE units SET sale_price = ?, metadata = ? WHERE id = ?`);
+    let appliedNextPrice = 1.0;
+    const finalMetadataMap = new Map<number, any>();
+
+    const updateMany = db.transaction((nextPrice: number, newMeta: any) => {
+      for (const unit of units) {
+        const minNext = (unit.current_price || 10.0) * 1.2;
+        const maxNext = (unit.current_price || 10.0) * 2.0;
+        const finalNext = Math.max(minNext, Math.min(maxNext, nextPrice));
+        appliedNextPrice = finalNext; 
+        
+        let currentMeta = {};
+        try { currentMeta = JSON.parse(unit.metadata || '{}'); } catch (e) {}
+        
+        const mergedMeta = { 
+          ...currentMeta, 
+          ...(newMeta || {}),
+          // Принудительно сохраняем статус, который пришел с фронтенда
+          is_for_sale: newMeta?.is_for_sale ?? currentMeta.is_for_sale ?? true 
+        };
+        
+        finalMetadataMap.set(unit.id, mergedMeta);
+        updateStmt.run(finalNext, JSON.stringify(mergedMeta), unit.id);
+      }
+    });
+
+    updateMany(nextSalePrice, metadata);
+    
+    // Обновляем кэш
+    for (const unit of units) {
+      const mergedMeta = finalMetadataMap.get(unit.id);
+      const existing = cachedGridMap!.get(unit.id);
+      if (existing) {
+        existing.sale_price = appliedNextPrice;
+        existing.metadata = mergedMeta;
+      }
+      pendingGridUpdates.set(unit.id, cachedGridMap!.get(unit.id));
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Update error:', error);
+    res.status(500).json({ error: 'Update failed' });
+  }
+});
 
   const NOWPAYMENTS_API_KEY = process.env.NOWPAYMENTS_API_KEY;
   const APP_BASE_URL = process.env.APP_URL || process.env.BASE_URL || 'https://your-app.onrender.com';
@@ -661,7 +695,15 @@ try {
       const units = db.prepare(`SELECT * FROM units WHERE id IN (${placeholders})`).all(...unitIds) as any[];
 
       if (units.length !== unitIds.length) return res.status(404).json({ error: 'Some units not found' });
-      const allForSale = units.every(u => !u.owner_id || (() => { try { return JSON.parse(u.metadata || '{}').is_for_sale === true; } catch { return false; } })());
+      const allForSale = units.every(u => !u.owner_id || (() => { 
+        try { 
+          const meta = JSON.parse(u.metadata || '{}'); 
+          console.log(`Checking unit #${u.id} for sale:`, meta.is_for_sale);
+          return meta.is_for_sale === true || meta.is_for_sale === 'true' || meta.is_for_sale === undefined; 
+        } catch { 
+          return false; 
+        } 
+      })());
       if (!allForSale) return res.status(403).json({ error: 'One or more units are locked' });
 
       const totalPrice = units.reduce((sum: number, u: any) => sum + u.sale_price, 0);
@@ -965,10 +1007,10 @@ app.use(express.static(path.join(process.cwd(), 'dist')));
 
   // Запуск сервера (убедись, что выше НЕТ другого const PORT)
   const PORT_VAL = 3000; 
-  httpServer.listen(PORT_VAL, '0.0.0.0', () => {
+httpServer.listen(PORT_VAL, '0.0.0.0', () => {
     console.log(`🚀 UNITY Server running on port ${PORT_VAL}`);
     console.log(`🤖 Бот готов! Жми /start в телеграме.`);
   });
-} // <--- Эта скобка закрывает функцию startServer
+} 
 
-startServer();
+startServer(); 
