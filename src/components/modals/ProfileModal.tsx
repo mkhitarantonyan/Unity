@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, BoxSelect, Image as ImageIcon, Wallet } from 'lucide-react';
+import { X, BoxSelect, Image as ImageIcon, Wallet, ArrowRight } from 'lucide-react';
 import { Unit } from '../../hooks/useGrid';
 import { getToken } from '../../utils/auth';
+import { toast } from 'sonner';
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -22,6 +23,9 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   setFocusUnitId 
 }) => {
   const [balance, setBalance] = useState<number>(0);
+  const [withdrawAmount, setWithdrawAmount] = useState<string>('');
+  const [walletAddress, setWalletAddress] = useState<string>('');
+  const [isWithdrawing, setIsWithdrawing] = useState<boolean>(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -36,6 +40,51 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
       }
     }
   }, [isOpen]);
+
+  const handleWithdraw = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!withdrawAmount || isNaN(Number(withdrawAmount)) || Number(withdrawAmount) <= 0) {
+      toast.error('Enter a valid amount');
+      return;
+    }
+    if (Number(withdrawAmount) > balance) {
+      toast.error('Insufficient balance');
+      return;
+    }
+    if (!walletAddress.trim()) {
+      toast.error('Enter a valid wallet address');
+      return;
+    }
+
+    setIsWithdrawing(true);
+    try {
+      const response = await fetch('/api/withdraw', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getToken()}`
+        },
+        body: JSON.stringify({
+          amount: Number(withdrawAmount),
+          walletAddress: walletAddress.trim()
+        })
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        toast.success('Заявка отправлена. Ожидайте поступления средств.');
+        setBalance(data.balance);
+        setWithdrawAmount('');
+        setWalletAddress('');
+      } else {
+        toast.error(data.error || 'Failed to request withdrawal');
+      }
+    } catch (err) {
+      toast.error('Network error during withdrawal');
+    } finally {
+      setIsWithdrawing(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -75,6 +124,60 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                   <Wallet size={12} /> Balance (USDT)
                 </div>
               </div>
+            </div>
+
+            <div className="bg-[#141414] p-6 rounded-2xl border border-[#262626]">
+              <div className="text-[10px] uppercase tracking-widest text-gray-500 font-bold mb-4">Withdraw Funds (BEP-20)</div>
+              <form onSubmit={handleWithdraw} className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">Amount (USDT)</label>
+                    <div className="relative">
+                      <input 
+                        type="number" 
+                        step="0.01" 
+                        min="0.01" 
+                        max={balance}
+                        value={withdrawAmount} 
+                        onChange={(e) => setWithdrawAmount(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full bg-[#0A0A0A] border border-[#262626] px-4 py-3 text-sm focus:outline-none focus:border-emerald-500 transition-colors text-white"
+                        disabled={isWithdrawing || balance <= 0}
+                      />
+                      <button 
+                        type="button"
+                        onClick={() => setWithdrawAmount(balance.toString())}
+                        disabled={isWithdrawing || balance <= 0}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] uppercase font-bold text-emerald-500 hover:text-emerald-400"
+                      >
+                        Max
+                      </button>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">Wallet Address</label>
+                    <input 
+                      type="text" 
+                      value={walletAddress} 
+                      onChange={(e) => setWalletAddress(e.target.value)}
+                      placeholder="0x..."
+                      className="w-full bg-[#0A0A0A] border border-[#262626] px-4 py-3 text-sm focus:outline-none focus:border-emerald-500 transition-colors text-white"
+                      disabled={isWithdrawing || balance <= 0}
+                    />
+                  </div>
+                </div>
+                <button 
+                  type="submit"
+                  disabled={isWithdrawing || balance <= 0 || !withdrawAmount || !walletAddress}
+                  className="w-full bg-emerald-600/20 text-emerald-500 hover:bg-emerald-600/30 hover:border-emerald-500/50 border border-emerald-500/30 py-4 font-bold uppercase tracking-[0.2em] text-xs transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isWithdrawing ? (
+                    <div className="w-4 h-4 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
+                  ) : (
+                    <>Request Withdrawal <ArrowRight size={16} /></>
+                  )}
+                </button>
+              </form>
             </div>
 
             {myUnits.length > 0 ? (

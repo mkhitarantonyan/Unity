@@ -81,6 +81,16 @@ db.exec(`
     status TEXT DEFAULT 'pending',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS withdrawals (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    amount REAL NOT NULL,
+    wallet_address TEXT NOT NULL,
+    status TEXT DEFAULT 'pending',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id)
+  );
 `);
 
 // Ensure minimal price is 10.0 for all unowned units on startup
@@ -592,6 +602,69 @@ try {
     
     const user = db.prepare('SELECT balance FROM users WHERE id = ?').get(session.user_id) as { balance: number };
     res.json({ balance: user?.balance || 0 });
+  });
+
+  app.post('/api/withdraw', authLimiter, (req, res) => {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader || !authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+    
+    const token = authHeader.split(' ')[1];
+    const session = db.prepare("SELECT user_id FROM sessions WHERE token = ? AND datetime(created_at, '+24 hours') > datetime('now')").get(token) as { user_id: string } | undefined;
+    
+    if (!session) return res.status(401).json({ error: 'Invalid or expired token' });
+    
+    const { amount, walletAddress } = req.body;
+    
+    if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
+      return res.status(400).json({ error: 'Invalid amount' });
+    }
+    
+    if (!walletAddress || typeof walletAddress !== 'string' || walletAddress.trim() === '') {
+      return res.status(400).json({ error: 'Invalid wallet address' });
+    }
+    
+    try {
+      const user = db.prepare('SELECT * FROM users WHERE id = ?').get(session.user_id) as any;
+      if (!user) return res.status(404).json({ error: 'User not found' });
+      
+      const numAmount = Number(amount);
+      if (user.balance < numAmount) {
+        return res.status(400).json({ error: 'Insufficient balance' });
+      }
+      
+      const withdrawalId = crypto.randomUUID();
+      
+      const processWithdrawal = db.transaction(() => {
+        db.prepare('UPDATE users SET balance = balance - ? WHERE id = ?').run(numAmount, user.id);
+        db.prepare('INSERT INTO withdrawals (id, user_id, amount, wallet_address) VALUES (?, ?, ?, ?)').run(
+          withdrawalId, user.id, numAmount, walletAddress.trim()
+        );
+      });
+      
+      processWithdrawal();
+      
+      // Уведомление администратору в Telegram
+      let adminTgId = process.env.ADMIN_TG_ID;
+      if (!adminTgId) {
+        const firstAdmin = db.prepare('SELECT telegram_id FROM users WHERE is_admin = 1 AND telegram_id IS NOT NULL LIMIT 1').get() as { telegram_id: string } | undefined;
+        if (firstAdmin) adminTgId = firstAdmin.telegram_id;
+      }
+      
+      if (bot && adminTgId) {
+        bot.sendMessage(
+          adminTgId, 
+          `🚨 *Новая заявка на вывод!*\n\nЮзер: @${user.username} (ID: ${user.id})\nСумма: ${numAmount.toFixed(2)} USDT\nКошелек: \`${walletAddress.trim()}\``,
+          { parse_mode: 'Markdown' }
+        ).catch(e => console.error('Telegram bot error (withdrawal):', e));
+      }
+      
+      const updatedUser = db.prepare('SELECT balance FROM users WHERE id = ?').get(user.id) as { balance: number };
+      res.json({ success: true, balance: updatedUser.balance });
+      
+    } catch (error) {
+      console.error('Withdrawal error:', error);
+      res.status(500).json({ error: 'Failed to process withdrawal' });
+    }
   });
 
   app.get('/api/grid', (req, res) => {

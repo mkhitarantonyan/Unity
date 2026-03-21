@@ -268,7 +268,7 @@ useEffect(() => {
   const selectedUnits = units.filter(u => selectedUnitIds.includes(u.id));
   const totalPrice = selectedUnits.reduce((sum, u) => sum + u.sale_price, 0);
   const isOwner = user && selectedUnitIds.length > 0 && selectedUnits.every(u => u.owner_id === user.id);
-  const canBuy = selectedUnits.every(u => !u.owner_id || u.metadata.is_for_sale === true);
+  const canBuy = selectedUnits.every(u => !u.owner_id || (u.owner_id !== user?.id && u.metadata?.is_for_sale !== false && u.metadata?.is_for_sale !== 'false'));
 
   useEffect(() => {
     if (selectedUnitIds.length === 0) {
